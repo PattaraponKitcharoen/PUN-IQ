@@ -10,6 +10,7 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // เก็บตัว subscription ไว้
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'PASSWORD_RECOVERY') {
@@ -18,6 +19,7 @@ export default function ResetPassword() {
       }
     );
     
+    // คืนค่าฟังก์ชันสำหรับ cleanup ตอนปิดหน้าเว็บ
     return () => {
       subscription?.unsubscribe();
     };
@@ -29,20 +31,16 @@ export default function ResetPassword() {
     setError('');
     setMessage('');
 
-    if (password.length < 6) {
-      setError('รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษรขึ้นไป');
-      setLoading(false);
-      return;
-    }
-
+    // คำสั่งเปลี่ยนรหัสผ่านของ Supabase
     const { error } = await supabase.auth.updateUser({
       password: password
     });
 
     if (error) {
-      setError(`เกิดข้อผิดพลาดในการบันทึก: ${error.message}`);
+      setError('เกิดข้อผิดพลาด: รหัสผ่านอาจจะสั้นเกินไป (ต้อง 6 ตัวขึ้นไป)');
     } else {
-      setMessage('🔒 ตั้งรหัสผ่านใหม่สำเร็จแล้ว! ระบบกำลังนำคุณกลับหน้าเข้าสู่ระบบ...');
+      setMessage('เปลี่ยนรหัสผ่านสำเร็จ! กำลังพากลับไปหน้า Login...');
+      // รอ 3 วินาทีแล้วเตะกลับไปหน้า Login
       setTimeout(() => {
         navigate('/login');
       }, 3000);
