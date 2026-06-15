@@ -5,7 +5,7 @@ Deno.serve(async (req) => {
   const ALLOWED_ORIGINS = [
     'http://localhost:5174', 
     'http://localhost:5173',
-    'https://your-production-domain.com' // อนาคตถ้าเอาเว็บขึ้นโฮสต์จริง อย่าลืมมาแก้ตรงนี้นะครับ
+    'https://tutor-system.vercel.app'
   ];
 
   const origin = req.headers.get('origin') || '';
