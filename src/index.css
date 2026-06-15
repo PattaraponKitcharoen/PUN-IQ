@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  /* ซ่อนปุ่มหรือ sidebar ที่ไม่ต้องการ */
+  .print\:hidden {
+    display: none !important;
+  }
+  /* ให้ตัว Component ปริ้นท์แสดงผลเต็มหน้า */
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

@@ -1,0 +1,238 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../../lib/supabase';
+
+export default function TutorEarnings() {
+  const [sessionUser, setSessionUser] = useState(null);
+  
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedLogs, setExpandedLogs] = useState([]);
+
+  // ระบบ Toggle แถวเพื่อดูรายละเอียดเนื้อหาที่สอน
+  const toggleRow = (logId) => {
+    setExpandedLogs(prev => prev.includes(logId) ? prev.filter(itemId => itemId !== logId) : [...prev, logId]);
+  };
+
+  useEffect(() => {
+    const fetchUserSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('id, name, username') 
+          .eq('id', session.user.id)
+          .single();
+        setSessionUser(profile || session.user);
+      }
+    };
+    fetchUserSession();
+  }, []);
+
+  useEffect(() => {
+    if (!sessionUser?.id || !selectedMonth) return;
+
+    const fetchMyTeachingLogs = async () => {
+      setLoading(true);
+      // 🔴 แก้ไขการคำนวณวันสิ้นเดือน ไม่ให้โดน Timezone เลื่อนวัน
+      const [year, month] = selectedMonth.split('-');
+      const startDate = `${year}-${month}-01`;
+      const lastDay = new Date(Number(year), Number(month), 0).getDate();
+      const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('teaching_logs')
+        // 🔴 ดึงข้อมูลชื่อนักเรียนผ่าน Foreign Key student_id
+        .select('*, users!teaching_logs_student_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
+        .eq('tutor_id', sessionUser.id)
+        .gte('teaching_date', startDate)
+        .lte('teaching_date', endDate)
+        .order('teaching_date', { ascending: true })
+        .order('start_time', { ascending: true });
+
+      if (!error && data) {
+        setLogs(data);
+      }
+      setLoading(false);
+    };
+
+    fetchMyTeachingLogs();
+  }, [sessionUser?.id, selectedMonth]);
+
+  const calculateEarnings = () => {
+    let totalHrs = 0;
+    let totalEarnings = 0;
+
+    const logsWithCalculation = logs.map(log => {
+      // ใช้เรทค่าจ้างครู (Tutor Rate) ในการคำนวณรายได้
+      const ratePerHour = log.applied_tutor_rate || 0;
+      
+      const grade = log.learning_type === 'course'
+        ? log.custom_courses?.grade_level
+        : log.grade_level;
+      
+      const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+      totalHrs += Number(log.duration_hours);
+      
+      // 🔴 แก้ไขตรงนี้: เปลี่ยนจาก totalAmt เป็น totalEarnings
+      totalEarnings = Math.round((totalEarnings + amount) * 100) / 100;
+
+      return { ...log, grade, ratePerHour, amount };
+    });
+
+    return { totalHrs, totalEarnings, logsWithCalculation };
+  };
+
+  const { totalHrs, totalEarnings, logsWithCalculation } = calculateEarnings();
+  const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-800 rounded-2xl p-8 text-white shadow-lg">
+        <h1 className="text-3xl font-bold mb-2">สรุปรายได้การสอน, {sessionUser?.name || sessionUser?.username || ''} 💼</h1>
+        <p className="text-emerald-100 opacity-90">ระบบสรุปชั่วโมงสอนและคำนวณค่าตอบแทนประจำเดือนของคุณครู</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        {/* ซ้าย: ตัวกรองและสรุปยอด */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800 uppercase mb-3 border-b pb-2">เลือกเดือนที่ต้องการดู</h2>
+            <div>
+              <input 
+                type="month" 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)} 
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 font-medium text-gray-700 bg-gray-50 hover:bg-white transition" 
+              />
+            </div>
+          </div>
+
+          <div className="bg-emerald-50 rounded-xl shadow-sm border border-emerald-200 p-5">
+            <h2 className="text-sm font-bold uppercase mb-4 text-emerald-800">สรุปรายได้เดือนนี้</h2>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-white/60 p-3 rounded-lg border border-emerald-100">
+                <span className="text-sm text-emerald-900 font-medium">รวมเวลาสอนทั้งหมด:</span>
+                <span className="font-bold text-lg text-emerald-700">{totalHrs} ชม.</span>
+              </div>
+              <div className="pt-2 border-t border-emerald-200/50">
+                <span className="block text-xs font-bold text-emerald-700/70 mb-1 uppercase tracking-wider">ค่าตอบแทนรวมโดยประมาณ:</span>
+                <span className="block text-4xl font-black text-emerald-600 tracking-tight">
+                  ฿{totalEarnings.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ขวา: ตารางประวัติการสอน */}
+        <div className="lg:col-span-3">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
+            <div className="flex justify-between items-center mb-6 border-b pb-4">
+              <h2 className="text-xl font-bold text-gray-800">
+                รายละเอียดการสอน ประจำเดือน {new Date(selectedMonth + '-01').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
+              </h2>
+            </div>
+
+            {loading ? (
+              <div className="text-center py-20 text-gray-400 animate-pulse flex flex-col items-center">
+                 <svg className="w-10 h-10 text-emerald-300 mb-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                 <p>กำลังดึงข้อมูลรายได้ของคุณ...</p>
+              </div>
+            ) : logsWithCalculation.length === 0 ? (
+              <div className="text-center py-16 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center">
+                 <span className="text-4xl mb-3">📅</span>
+                 <p className="font-medium text-gray-600">ไม่มีประวัติการสอนในเดือนนี้</p>
+                 <p className="text-xs text-gray-400 mt-1">หากคุณเพิ่งสอนเสร็จ อย่าลืมไปลงเวลาสอนนะครับ</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="p-3 w-10 text-center">ดู</th> 
+                      <th className="p-3 font-bold whitespace-nowrap">วันที่สอน</th>
+                      <th className="p-3 font-bold">วิชา / คอร์ส</th>
+                      <th className="p-3 font-bold">สอนนักเรียน</th>
+                      <th className="p-3 font-bold text-center">ชม.</th>
+                      <th className="p-3 font-bold text-right">เรท/ชม.</th>
+                      <th className="p-3 font-bold text-right">รายได้</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {logsWithCalculation.map(log => (
+                      <React.Fragment key={log.id}>
+                        <tr onClick={() => toggleRow(log.id)} className="hover:bg-emerald-50/30 cursor-pointer transition-colors group">
+                          <td className="p-3 text-center">
+                            <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedLogs.includes(log.id) ? 'rotate-90 text-emerald-600' : 'group-hover:text-emerald-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          </td>
+                          <td className="p-3 whitespace-nowrap text-gray-700 font-medium">
+                            {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                          </td>
+                          <td className="p-3">
+                            {log.learning_type === 'course' ? (
+                              <span className="font-bold text-amber-700 text-xs">
+                                🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'} 
+                                <span className="text-gray-500 font-normal ml-1">({log.custom_courses?.grade_level || log.grade || '-'})</span>
+                              </span>
+                            ) : (
+                              <div className="flex items-center space-x-1.5 whitespace-nowrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {log.learning_type === 'advanced' ? 'Adv' : 'Gen'}
+                                </span>
+                                <span className="font-medium text-gray-800">
+                                  {log.subjects?.subject_name || '-'} 
+                                  <span className="text-gray-500 font-normal text-[11px] ml-1">({log.grade || '-'})</span>
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          {/* 🔴 ดึงชื่อนักเรียนมาแสดงแทนชื่อตัวเอง */}
+                          <td className="p-3 font-semibold text-indigo-700">
+                            {log.users?.name || log.users?.username}
+                          </td>
+                          <td className="p-3 text-center font-bold text-gray-800">{log.duration_hours}</td>
+                          <td className="p-3 text-right text-gray-400 text-xs">฿{log.ratePerHour}</td>
+                          <td className="p-3 text-right font-bold text-emerald-700">฿{log.amount.toLocaleString()}</td>
+                        </tr>
+                        
+                        {/* ส่วนขยายแสดงรายละเอียดเพิ่มเติม */}
+                        {expandedLogs.includes(log.id) && (
+                          <tr className="bg-emerald-50/40 border-b border-emerald-100">
+                            <td colSpan="7" className="p-4 px-12 text-sm shadow-inner">
+                              <div className="flex flex-col space-y-2 text-gray-700">
+                                <div className="flex items-center">
+                                  <span className="font-bold text-emerald-800 w-16">เวลา:</span>
+                                  <span className="text-gray-700 font-medium bg-white px-2 py-0.5 rounded border border-gray-200">
+                                    {formatTime(log.start_time)} น. - {formatTime(log.end_time)} น.
+                                  </span>
+                                </div>
+                                <div className="flex items-start">
+                                  <span className="font-bold text-emerald-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
+                                  <span className="text-gray-600 italic bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm w-full leading-relaxed">
+                                    {log.topic || <span className="text-gray-400">คุณไม่ได้ระบุรายละเอียดเนื้อหาในคลาสนี้</span>}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
