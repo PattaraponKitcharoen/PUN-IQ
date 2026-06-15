@@ -50,52 +50,32 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-emerald-600/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-teal-600/10 rounded-full blur-[120px] pointer-events-none" />
-
-      <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-md backdrop-blur-md z-10">
-        
-        <div className="flex flex-col items-center mb-8">
-          {/* <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-4 overflow-hidden">
-            <img 
-              src="/logo.png" 
-              alt="Logo" 
-              className="w-11 h-11 object-contain"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.parentNode.innerHTML = '<span class="text-white text-2xl font-black">IQ</span>';
-              }}
-            />
-          </div> */}
-          <h2 className="text-2xl font-extrabold text-white tracking-tight">ตั้งรหัสผ่านใหม่</h2>
-          <p className="text-slate-400 text-xs mt-1 font-medium">กรุณากำหนดรหัสผ่านที่มีความปลอดภัยสูง</p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
+          ตั้งรหัสผ่านใหม่
+        </h2>
         
         {error && (
-          <div className="bg-red-950/50 border border-red-500/50 text-red-200 px-4 py-3 rounded-xl mb-5 text-sm flex items-center space-x-2 animate-shake">
-            <svg className="w-5 h-5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span className="font-medium">{error}</span>
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">
+            {error}
           </div>
         )}
 
         {message && (
-          <div className="bg-emerald-950/50 border border-emerald-500/50 text-emerald-200 px-4 py-3 rounded-xl mb-5 text-sm flex items-start space-x-2">
-            <span className="font-medium text-center">{message}</span>
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4 text-sm">
+            {message}
           </div>
         )}
 
-        <form onSubmit={handleUpdatePassword} className="space-y-5">
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
           <div>
-            <label className="block text-slate-300 text-xs font-bold uppercase tracking-wider mb-2">รหัสผ่านใหม่ (New Password)</label>
+            <label className="block text-gray-700 text-sm font-bold mb-2">รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</label>
             <input
               type="password"
-              className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-600 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition duration-200 text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="ระบุอย่างน้อย 6 ตัวอักษร"
               required
             />
           </div>
@@ -103,9 +83,9 @@ export default function ResetPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-600/20 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none mt-2 text-sm"
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
           >
-            {loading ? 'กำลังบันทึกข้อมูล...' : 'บันทึกรหัสผ่านใหม่'}
+            {loading ? 'กำลังบันทึก...' : 'บันทึกรหัสผ่านใหม่'}
           </button>
         </form>
       </div>
