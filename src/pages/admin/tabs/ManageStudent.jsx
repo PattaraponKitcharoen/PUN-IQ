@@ -61,10 +61,6 @@ export default function ManageStudent() {
   };
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
     const delay = searchTerm === '' ? 0 : 500;
@@ -99,7 +95,11 @@ export default function ManageStudent() {
               type="text"
               placeholder="ค้นหาชื่อ หรือ Username นักเรียน..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              // 🔴 แก้ onChange ให้เซ็ตหน้าปัจจุบันกลับเป็นหน้า 1 ทันทีที่พิมพ์
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
             />
           </div>

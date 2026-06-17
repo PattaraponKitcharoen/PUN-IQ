@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+// 🔴 1. นำเข้า useRef เพิ่มเติมเพื่อใช้เป็นหน่วยความจำ
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 
 import Login from './pages/auth/Login';
 import ResetPassword from './pages/auth/ResetPassword';
 import AdminLayout from './pages/admin/AdminLayout'; 
 import TutorLayout from './pages/tutor/TutorLayout';
-// 🔴 นำเข้าหน้าต่างประวัตินักเรียนเข้ามาทำงานร่วมกับระบบเราท์เตอร์
 import StudentDashboard from './pages/student/StudentDashboard';
 
 const NotFound = () => <div className="p-10 text-xl font-bold text-gray-500">404 - ไม่พบหน้านี้</div>;
@@ -16,11 +16,14 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
   const [authenticated, setAuthenticated] = useState(false);
+  
+  // 🔴 2. สร้างตัวแปรจำ ID ผู้ใช้ เพื่อกันการโหลดซ้ำซ้อน
+  const currentUserId = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    // 1. ตรวจสอบสิทธิ์ทันทีที่โหลดหน้า (แก้ปัญหาล็อกอินแล้วค้าง)
+    // 1. ตรวจสอบสิทธิ์ทันทีที่โหลดหน้า
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (isMounted) {
@@ -36,6 +39,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
         if (event === 'SIGNED_OUT' || !session) {
           setAuthenticated(false);
           setUserRole(null);
+          currentUserId.current = null; // ล้างความจำเมื่อออกจากระบบ
           setLoading(false);
         } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
           await handleSession(session);
@@ -49,62 +53,72 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     };
   }, []);
 
-  // 🔴 เพิ่มกลไกตรวจสอบ Role ซ้ำทุกๆ 5 นาที ป้องกันการค้าง Session เมื่อแอดมินเปลี่ยนสิทธิ์
-    useEffect(() => {
-      const interval = setInterval(async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        
-        const { data: userData } = await supabase
-          .from('users').select('role').eq('id', session.user.id).single();
-        
-        if (!userData) {
-          await supabase.auth.signOut();
-          window.location.href = '/login';
-          return;
-        }
-        
-        if (allowedRole && userData.role !== allowedRole) {
-          // ถ้าระหว่างใช้งานอยู่โดนเปลี่ยน Role ให้เตะกลับไปหน้าที่ถูกต้องทันที
-          window.location.href = userData.role === 'admin' 
-            ? '/admin' 
-            : userData.role === 'tutor' 
-              ? '/tutor' 
-              : '/student';
-        }
-      }, 5 * 60 * 1000); // 5 นาที (หน่วยเป็นมิลลิวินาที)
-
-      return () => clearInterval(interval);
-    }, [allowedRole]);
-
-  // 🔴 ปรับปรุงการตรวจสอบ Session ให้บังคับ Logout ทันทีถ้าดึงข้อมูล Role ไม่สำเร็จ
-    const handleSession = async (session) => {
-      if (!session) {
-        setAuthenticated(false);
-        setUserRole(null);
+  // เพิ่มกลไกตรวจสอบ Role ซ้ำทุกๆ 5 นาที ป้องกันการค้าง Session เมื่อแอดมินเปลี่ยนสิทธิ์
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      
+      const { data: userData } = await supabase
+        .from('users').select('role').eq('id', session.user.id).single();
+      
+      if (!userData) {
+        await supabase.auth.signOut();
+        window.location.href = '/login';
         return;
       }
-      setAuthenticated(true);
       
-      try {
-        const { data: userData, error } = await supabase
-          .from('users').select('role').eq('id', session.user.id).single();
-        
-        if (error || !userData) {
-          console.error('Failed to fetch user role:', error);
-          await supabase.auth.signOut();
-          setAuthenticated(false);
-          setUserRole(null);
-          return;
-        }
-        
-        setUserRole(userData.role);
-      } catch (err) {
-        console.error('Session validation error:', err);
+      if (allowedRole && userData.role !== allowedRole) {
+        // ถ้าระหว่างใช้งานอยู่โดนเปลี่ยน Role ให้เตะกลับไปหน้าที่ถูกต้องทันที
+        window.location.href = userData.role === 'admin' 
+          ? '/admin' 
+          : userData.role === 'tutor' 
+            ? '/tutor' 
+            : '/student';
+      }
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [allowedRole]);
+
+  // 🔴 3. ปรับปรุง handleSession ให้เช็คความจำก่อนดึงข้อมูล DB เสมอ
+  const handleSession = async (session) => {
+    if (!session) {
+      setAuthenticated(false);
+      setUserRole(null);
+      currentUserId.current = null;
+      return;
+    }
+    
+    setAuthenticated(true);
+    
+    // 🔴 Guard Clause: ถ้ารู้จัก User คนนี้แล้ว ให้ข้ามการดึง Database ไปเลย!
+    if (currentUserId.current === session.user.id) {
+      return;
+    }
+
+    try {
+      const { data: userData, error } = await supabase
+        .from('users').select('role').eq('id', session.user.id).single();
+      
+      if (error || !userData) {
+        console.error('Failed to fetch user role:', error);
         await supabase.auth.signOut();
         setAuthenticated(false);
+        setUserRole(null);
+        currentUserId.current = null;
+        return;
       }
-    };
+      
+      setUserRole(userData.role);
+      currentUserId.current = session.user.id; // บันทึกความจำไว้ว่าโหลด Role คนนี้เสร็จแล้ว
+    } catch (err) {
+      console.error('Session validation error:', err);
+      await supabase.auth.signOut();
+      setAuthenticated(false);
+      currentUserId.current = null;
+    }
+  };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...</div>;
   if (!authenticated) return <Navigate to="/login" replace />;
@@ -143,7 +157,7 @@ function App() {
           } 
         />
 
-        {/* 🔴 โซนนักเรียน: ลงทะเบียนเปิดเส้นทางคุ้มกันให้นักเรียนล็อกอินเข้าใช้งาน */}
+        {/* โซนนักเรียน */}
         <Route 
           path="/student" 
           element={

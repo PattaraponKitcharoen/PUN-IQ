@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 // 🔴 นำเข้า Modal ใบเสร็จ (ปรับ path ให้ตรงกับโครงสร้างโฟลเดอร์ของคุณ หากไม่ตรง)
 import StudentInvoiceModal from '../admin/modals/StudentInvoiceModal';
@@ -86,29 +86,28 @@ export default function StudentDashboard() {
     fetchMyLogs();
   }, [sessionUser?.id, selectedMonth]);
 
-  const calculateSummary = () => {
-    let totalHrs = 0;
-    let totalAmt = 0;
+  // 🔴 ปรับปรุง: ใช้ useMemo ครอบการคำนวณ เพื่อป้องกันการคำนวณใหม่ทุกครั้งที่กดขยายแถว (ลดอาการหน่วง)
+  const { totalHrs, totalAmt, logsWithCalculation } = useMemo(() => {
+    let tHrs = 0;
+    let tAmt = 0;
 
-    const logsWithCalculation = logs.map(log => {
+    const computedLogs = logs.map(log => {
       const ratePerHour = log.applied_student_rate || 0;
       
-      // 🔴 ตรวจสอบการดึงระดับชั้นให้ครอบคลุมคอร์สพิเศษ
       const grade = log.learning_type === 'course'
         ? log.custom_courses?.grade_level
         : log.grade_level;
       
       const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
-      totalHrs += Number(log.duration_hours);
-      totalAmt = Math.round((totalAmt + amount) * 100) / 100;
+      tHrs += Number(log.duration_hours);
+      tAmt = Math.round((tAmt + amount) * 100) / 100;
 
       return { ...log, grade, ratePerHour, amount };
     });
 
-    return { totalHrs, totalAmt, logsWithCalculation };
-  };
-
-  const { totalHrs, totalAmt, logsWithCalculation } = calculateSummary();
+    return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs };
+  }, [logs]); // <-- ระบบจะคำนวณใหม่ก็ต่อเมื่อตัวแปร logs มีการเปลี่ยนแปลงเท่านั้น
+  
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
   const handleOpenInvoice = () => {
