@@ -9,6 +9,11 @@ export default function Dashboard() {
     thisMonthHours: 0
   });
   
+  // 🔴 1. เพิ่ม State สำหรับเก็บข้อมูลการเงินและ Modal
+  const [financialStats, setFinancialStats] = useState({ revenue: 0, expense: 0, profit: 0 });
+  const [breakdownData, setBreakdownData] = useState({ revenue: [], expense: [] });
+  const [activeModal, setActiveModal] = useState(null); // 'revenue' | 'expense' | null
+
   const [recentLogs, setRecentLogs] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingLogs, setLoadingLogs] = useState(true);
@@ -31,6 +36,7 @@ export default function Dashboard() {
     const startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
     const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
     
+    // 🔴 2. เพิ่มการดึงเรทราคาของเด็กและครู รวมถึงชื่อเพื่อเอามาแยกกลุ่ม
     const [
       { count: studentCount },
       { count: tutorCount },
@@ -40,10 +46,48 @@ export default function Dashboard() {
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'tutor'),
       supabase.from('groups').select('*', { count: 'exact', head: true }),
-      supabase.from('teaching_logs').select('duration_hours').gte('teaching_date', startDate).lte('teaching_date', endDate)
+      supabase.from('teaching_logs')
+        .select('duration_hours, applied_student_rate, applied_tutor_rate, users!teaching_logs_student_id_fkey(name, username), tutor:tutor_id(name)')
+        .gte('teaching_date', startDate)
+        .lte('teaching_date', endDate)
     ]);
 
-    const totalHours = logsData ? logsData.reduce((sum, log) => sum + Number(log.duration_hours), 0) : 0;
+    let totalHours = 0;
+    let totalRev = 0;
+    let totalExp = 0;
+    let revMap = {};
+    let expMap = {};
+
+    // 🔴 3. ลอจิกคำนวณและจัดกลุ่มรายรับ-รายจ่าย
+    if (logsData) {
+      logsData.forEach(log => {
+        const hrs = Number(log.duration_hours) || 0;
+        totalHours += hrs;
+
+        const rev = hrs * (Number(log.applied_student_rate) || 0);
+        const exp = hrs * (Number(log.applied_tutor_rate) || 0);
+
+        totalRev += rev;
+        totalExp += exp;
+
+        // จัดกลุ่มรายรับตามนักเรียน
+        const studentName = log.users?.name || log.users?.username || 'ไม่ระบุชื่อนักเรียน';
+        if (!revMap[studentName]) revMap[studentName] = 0;
+        revMap[studentName] += rev;
+
+        // จัดกลุ่มรายจ่ายตามครู
+        const tutorName = log.tutor?.name || 'ไม่ระบุชื่อครู';
+        if (!expMap[tutorName]) expMap[tutorName] = 0;
+        expMap[tutorName] += exp;
+      });
+    }
+
+    // แปลง Object ให้เป็น Array และเรียงลำดับจากยอดมากไปน้อย
+    const revArray = Object.keys(revMap).map(name => ({ name, amount: revMap[name] })).sort((a,b) => b.amount - a.amount);
+    const expArray = Object.keys(expMap).map(name => ({ name, amount: expMap[name] })).sort((a,b) => b.amount - a.amount);
+
+    setBreakdownData({ revenue: revArray, expense: expArray });
+    setFinancialStats({ revenue: totalRev, expense: totalExp, profit: totalRev - totalExp });
 
     setStats({
       totalStudents: studentCount || 0,
@@ -57,7 +101,6 @@ export default function Dashboard() {
   const fetchRecentLogs = async (page) => {
     setLoadingLogs(true);
     const from = (page - 1) * ITEMS_PER_PAGE;
-    // 🔴 1. สั่งให้ดึงข้อมูล "เกินมา 1 ตัว" เพื่อพิสูจน์ว่ามีหน้าถัดไปจริงๆ ไหม
     const to = from + ITEMS_PER_PAGE; 
 
     const { data } = await supabase
@@ -68,21 +111,18 @@ export default function Dashboard() {
       .range(from, to);
 
     if (data) {
-      // 🔴 2. เช็คว่าดึงมาได้เกินโควต้าไหม ถ้าเกินแปลว่ามีหน้าถัดไปชัวร์
       setHasMoreLogs(data.length > ITEMS_PER_PAGE); 
-      // 🔴 3. ตัดตัวที่เกินทิ้งไป ให้แสดงผลแค่ 10 แถวพอดี
       setRecentLogs(data.slice(0, ITEMS_PER_PAGE)); 
     }
     setLoadingLogs(false);
   };
 
-  // 🔴 2. ฟังก์ชันช่วยจัดฟอร์แมตเวลา
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
   if (loadingStats) return <div className="p-10 text-center text-gray-500 animate-pulse">กำลังโหลดแผงควบคุมภาพรวม...</div>;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 relative">
       
       <div>
         <h1 className="text-2xl font-bold text-gray-800">ภาพรวมระบบ (Dashboard)</h1>
@@ -109,8 +149,46 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      {/* 🔴 4. โซนการเงินประจำเดือน (คลิกได้) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div 
+          onClick={() => setActiveModal('revenue')}
+          className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between cursor-pointer hover:ring-2 hover:ring-green-400 transition group"
+        >
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase group-hover:text-green-600 transition">รายรับเดือนนี้ (ยอดโอนเด็ก)</p>
+            <p className="text-2xl font-black text-green-600">฿ {financialStats.revenue.toLocaleString()}</p>
+          </div>
+          <div className="p-3 bg-green-50 text-green-600 rounded-lg group-hover:bg-green-100 transition">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+          </div>
+        </div>
         
+        <div 
+          onClick={() => setActiveModal('expense')}
+          className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between cursor-pointer hover:ring-2 hover:ring-red-400 transition group"
+        >
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase group-hover:text-red-600 transition">รายจ่ายเดือนนี้ (ยอดโอนครู)</p>
+            <p className="text-2xl font-black text-red-500">฿ {financialStats.expense.toLocaleString()}</p>
+          </div>
+          <div className="p-3 bg-red-50 text-red-500 rounded-lg group-hover:bg-red-100 transition">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" /></svg>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-xl border border-slate-700 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase">กำไรสุทธิคาดการณ์</p>
+            <p className="text-2xl font-black text-white">฿ {financialStats.profit.toLocaleString()}</p>
+          </div>
+          <div className="p-3 bg-white/10 text-white rounded-lg">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6">
         {/* โซน 2: ความเคลื่อนไหวล่าสุด พร้อมระบบ Pagination */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
           <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
@@ -127,10 +205,10 @@ export default function Dashboard() {
               <thead className="bg-white text-gray-500 text-xs uppercase">
                 <tr>
                   <th className="p-4 font-semibold border-b whitespace-nowrap">วันที่สอน</th>
-                  <th className="p-4 font-semibold border-b text-center whitespace-nowrap">เวลา</th> {/* 🔴 เพิ่มหัวตารางเวลา */}
+                  <th className="p-4 font-semibold border-b text-center whitespace-nowrap">เวลา</th>
                   <th className="p-4 font-semibold border-b">คุณครู</th>
                   <th className="p-4 font-semibold border-b">นักเรียน</th>
-                  <th className="p-4 font-semibold border-b">วิชา (ระดับชั้น)</th> {/* 🔴 เพิ่มวงเล็บระดับชั้น */}
+                  <th className="p-4 font-semibold border-b">วิชา (ระดับชั้น)</th>
                   <th className="p-4 font-semibold text-center border-b">ชม.</th>
                 </tr>
               </thead>
@@ -143,13 +221,11 @@ export default function Dashboard() {
                       <td className="p-4 text-gray-600 font-medium whitespace-nowrap">
                         {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                       </td>
-                      {/* 🔴 เพิ่มคอลัมน์แสดงเวลาเริ่ม-สิ้นสุด */}
                       <td className="p-4 text-center text-gray-500 text-xs whitespace-nowrap">
                         {log.start_time && log.end_time ? `${formatTime(log.start_time)} - ${formatTime(log.end_time)}` : '-'}
                       </td>
                       <td className="p-4 font-medium text-gray-800">{log.tutor?.name || '-'}</td>
                       <td className="p-4 text-indigo-600 font-bold">{log.users?.name || log.users?.username}</td>
-                      {/* 🔴 ปรับปรุงเงื่อนไขให้แสดงป้ายประเภท และวงเล็บระดับชั้น */}
                       <td className="p-4 text-gray-700">
                         {log.learning_type === 'course' ? (
                           <span className="font-semibold text-amber-700 text-xs">
@@ -199,6 +275,59 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* 🔴 5. Modal สำหรับแจกแจงยอดเงิน */}
+      {activeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setActiveModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className={`p-5 border-b flex justify-between items-center text-white ${activeModal === 'revenue' ? 'bg-green-600' : 'bg-red-500'}`}>
+              <div>
+                <h3 className="font-bold text-lg">
+                  {activeModal === 'revenue' ? 'สรุปยอดที่ต้องเรียกเก็บนักเรียน' : 'สรุปยอดที่ต้องโอนจ่ายคุณครู'}
+                </h3>
+                <p className="text-sm opacity-90 mt-0.5">ประจำเดือนนี้</p>
+              </div>
+              <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-white/20 rounded-lg transition">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="p-0 overflow-y-auto flex-1 bg-gray-50">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-100 sticky top-0 shadow-sm">
+                  <tr>
+                    <th className="p-4 font-semibold text-gray-600">{activeModal === 'revenue' ? 'ชื่อนักเรียน' : 'ชื่อคุณครูผู้สอน'}</th>
+                    <th className="p-4 font-semibold text-gray-600 text-right">ยอดรวม (บาท)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {(activeModal === 'revenue' ? breakdownData.revenue : breakdownData.expense).map((item, index) => (
+                    <tr key={index} className="hover:bg-gray-50 transition">
+                      <td className="p-4 font-medium text-gray-800">{item.name}</td>
+                      <td className={`p-4 text-right font-bold ${activeModal === 'revenue' ? 'text-green-600' : 'text-red-500'}`}>
+                        {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                  {(activeModal === 'revenue' ? breakdownData.revenue : breakdownData.expense).length === 0 && (
+                    <tr>
+                      <td colSpan="2" className="p-8 text-center text-gray-400">ยังไม่มียอดเงินในเดือนนี้</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="p-4 border-t bg-white flex justify-between items-center">
+              <span className="font-bold text-gray-600">ยอดรวมทั้งหมด</span>
+              <span className={`text-xl font-black ${activeModal === 'revenue' ? 'text-green-600' : 'text-red-500'}`}>
+                ฿ {(activeModal === 'revenue' ? financialStats.revenue : financialStats.expense).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
