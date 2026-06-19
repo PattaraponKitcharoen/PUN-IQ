@@ -109,10 +109,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         
         {/* โซน 2: ความเคลื่อนไหวล่าสุด พร้อมระบบ Pagination */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
           <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
             <h2 className="font-bold text-gray-800">คลาสเรียนล่าสุดที่มีการบันทึก</h2>
           </div>
@@ -198,23 +198,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-        {/* โซน 3: Quick Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 h-fit">
-          <h2 className="font-bold text-gray-800 mb-4 pb-2 border-b">ทางลัด (Quick Actions)</h2>
-          <div className="space-y-3">
-            <button className="w-full flex items-center p-3 text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition">
-              <span className="text-xl mr-3">💰</span> เปิดดูบิลลิ่งเดือนปัจจุบัน
-            </button>
-            <button className="w-full flex items-center p-3 text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition">
-              <span className="text-xl mr-3">👩‍🏫</span> ดูประวัติการสอนของคุณครู
-            </button>
-            <button className="w-full flex items-center p-3 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition">
-              <span className="text-xl mr-3">📚</span> จัดการเรทราคา / วิชาเรียน
-            </button>
-          </div>
-        </div>
-
       </div>
     </div>
   );
