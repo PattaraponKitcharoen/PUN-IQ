@@ -76,7 +76,6 @@ export default function AddTutorModal({ isOpen, onClose }) {
     setName('');
     setEmail('');
     setUsername('');
-    setPhone('');
     setError('');
     setMessage('');
     onClose();
