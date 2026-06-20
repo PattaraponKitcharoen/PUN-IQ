@@ -119,7 +119,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
       <div className="shrink-0 mt-1">
         <div className="bg-[#fffdf0] border border-[#d2b48c] p-1.5 mb-2 text-black text-[9px] sm:text-[10px]">
           <p className="font-bold text-[#8b6508] mb-0.5">การชำระเงิน</p>
-          <p>-กรุณาชำระเงินภายในวันที่ 3 วัน</p>
+          <p>-กรุณาชำระเงินภายใน 3 วัน</p>
           <p>-หากมีข้อสงสัยติดต่อ 096-9569625 (ครูลิ)</p>
         </div>
 
