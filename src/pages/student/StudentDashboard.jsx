@@ -24,6 +24,12 @@ export default function StudentDashboard() {
     setExpandedLogs(prev => prev.includes(logId) ? prev.filter(itemId => itemId !== logId) : [...prev, logId]);
   };
 
+  // 🔴 ฟังก์ชันออกจากระบบ
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login';
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       // 1. ดึงข้อมูล User Session
@@ -125,9 +131,23 @@ export default function StudentDashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       
-      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-lg">
-        <h1 className="text-3xl font-bold mb-2">สวัสดี, {sessionUser?.name || sessionUser?.username || 'นักเรียน'} 👋</h1>
-        <p className="text-blue-100 opacity-90">ยินดีต้อนรับสู่ระบบประวัติการเรียนและการชำระเงิน คุณสามารถตรวจสอบรายละเอียดคลาสเรียนได้ที่นี่</p>
+      {/* 🔴 ปรับ flex เพื่อแยกข้อความไว้ซ้าย และปุ่มไว้ขวา */}
+      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">สวัสดี, {sessionUser?.name || sessionUser?.username || 'นักเรียน'} 👋</h1>
+          <p className="text-blue-100 opacity-90">ยินดีต้อนรับสู่ระบบประวัติการเรียนและการชำระเงิน คุณสามารถตรวจสอบรายละเอียดคลาสเรียนได้ที่นี่</p>
+        </div>
+        
+        {/* 🔴 ปุ่มออกจากระบบ (สไตล์โปร่งแสงกลืนกับพื้นหลัง) */}
+        <button 
+          onClick={handleLogout}
+          className="bg-white/20 hover:bg-white/30 text-white font-semibold py-2.5 px-5 rounded-xl text-sm backdrop-blur-sm transition flex items-center space-x-2 whitespace-nowrap border border-white/10 shadow-sm"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span>ออกจากระบบ</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
