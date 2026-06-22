@@ -1,0 +1,97 @@
+import { useState } from 'react';
+import { supabase } from '../../../lib/supabase';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+export default function ConfirmDeleteStudentModal({ isOpen, onClose, student, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  if (!isOpen || !student) return null;
+
+  const handleDelete = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      // 1. ตรวจสอบเงื่อนไขความสัมพันธ์ฐานข้อมูลก่อนลบ (Foreign Key)
+      const { count, error: checkError } = await supabase
+        .from('teaching_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('student_id', student.id);
+
+      if (checkError) throw new Error(checkError.message);
+
+      if (count > 0) {
+        throw new Error(`ไม่สามารถลบนักเรียนคนนี้ได้ เนื่องจากมีประวัติบันทึกเข้าเรียนค้างอยู่ในระบบจำนวน ${count} คลาส`);
+      }
+
+      // 2. ดึงสิทธิ์แอดมินเพื่อใช้ยิงเข้า Edge Function แบบปลอดภัย
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId: student.id })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'เกิดข้อผิดพลาดในการสั่งลบบัญชีนักเรียนจากเซิร์ฟเวอร์');
+      }
+
+      // ปิดหน้าต่างและสั่งรีเฟรชรายชื่อใหม่
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="p-6 text-center">
+          <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">ยืนยันการลบนักเรียน?</h3>
+          <p className="text-gray-500 text-sm mb-6">
+            คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลของ <span className="font-bold text-gray-800">{student.name || student.username}</span>? บัญชีเข้าใช้งานและข้อมูลประวัติจะถูกนำออกจากระบบถาวร
+          </p>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg text-left break-words">
+              ⚠️ {error}
+            </div>
+          )}
+
+          <div className="flex space-x-3">
+            <button 
+              onClick={onClose} 
+              disabled={loading}
+              className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-xl transition disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button 
+              onClick={handleDelete} 
+              disabled={loading}
+              className="w-1/2 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-xl transition shadow-lg shadow-red-500/30 flex items-center justify-center disabled:opacity-50"
+            >
+              {loading ? 'กำลังลบ...' : 'ลบข้อมูล'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

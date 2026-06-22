@@ -1,14 +1,21 @@
 import { supabase } from '../../lib/supabase';
+// 🔴 1. นำเข้าเครื่องมือตรวจสอบ URL
+import { useNavigate, useLocation } from 'react-router-dom';
 
-export default function TutorSidebar({ activeTab, setActiveTab, isSidebarOpen, setIsSidebarOpen }) {
+export default function TutorSidebar({ isSidebarOpen, setIsSidebarOpen }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
   };
 
+  // 🔴 2. เพิ่มแท็บประวัติ พร้อมปรับไอคอนให้สื่อความหมายชัดเจนขึ้น
   const menuItems = [
-    { id: 'timelog', label: 'ลงเวลาสอน', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> },
-    { id: 'billing', label: 'สรุปรายได้ / บิล', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
+    { id: 'timelog', path: '/tutor/timelog', label: 'ลงเวลาสอน', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /> }, // ไอคอน + (บวก)
+    { id: 'history', path: '/tutor/history', label: 'ประวัติการสอน', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> }, // ไอคอน นาฬิกา
+    { id: 'billing', path: '/tutor/billing', label: 'สรุปรายได้ / บิล', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
   ];
 
   return (
@@ -23,12 +30,24 @@ export default function TutorSidebar({ activeTab, setActiveTab, isSidebarOpen, s
             </div>
           </div>
           <nav className="space-y-1">
-            {menuItems.map((item) => (
-              <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'}`}>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">{item.icon}</svg>
-                <span>{item.label}</span>
-              </button>
-            ))}
+            {menuItems.map((item) => {
+              // 🔴 3. ลอจิกสำคัญ: ไฮไลต์สีน้ำเงิน ถ้า URL ตรงกับ Path หรือ ถ้าอยู่หน้า edit-log ก็ให้ไฮไลต์แท็บ history ค้างไว้!
+              const isActive = location.pathname.includes(item.path) || (item.id === 'history' && location.pathname.includes('/edit-log'));
+              
+              return (
+                <button 
+                  key={item.id} 
+                  onClick={() => { 
+                    navigate(item.path); 
+                    setIsSidebarOpen(false); 
+                  }} 
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-indigo-600 text-white shadow-sm' : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'}`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">{item.icon}</svg>
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </nav>
         </div>
         <button onClick={handleLogout} className="w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium text-red-300 hover:bg-red-900/50 rounded-lg transition-colors">

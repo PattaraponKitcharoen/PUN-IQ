@@ -1,19 +1,15 @@
 import { useState } from 'react';
+// 🔴 1. นำเข้าเครื่องมือจัดการ Route
+import { Routes, Route, Navigate } from 'react-router-dom'; 
 import TutorSidebar from './TutorSidebar';
 import TimeLog from './tabs/TimeLog';
 import TutorBilling from './tabs/TutorBilling';
+import HistoryLog from './tabs/HistoryLog';
+// 🔴 2. อย่าลืมนำเข้าหน้า Edit ด้วย
+import EditTimeLog from './tabs/EditTimeLog'; 
 
 export default function TutorLayout() {
-  const [activeTab, setActiveTab] = useState('timelog');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'timelog': return <TimeLog />;
-      case 'billing': return <TutorBilling />;
-      default: return <TimeLog />;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
@@ -26,15 +22,21 @@ export default function TutorLayout() {
         </button>
       </div>
 
+      {/* 🔴 3. ถอด props เรื่อง activeTab ออก เพราะเดี๋ยว Sidebar จะเช็คจาก URL เอง */}
       <TutorSidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
         isSidebarOpen={isSidebarOpen} 
         setIsSidebarOpen={setIsSidebarOpen} 
       />
 
       <main className="flex-1 p-6 md:p-10 overflow-y-auto max-h-screen">
-        {renderContent()}
+        {/* 🔴 4. เปลี่ยนมาใช้ Routes ควบคุมหน้าแทน switch case */}
+        <Routes>
+          <Route path="/" element={<Navigate to="timelog" replace />} />
+          <Route path="timelog" element={<TimeLog />} />
+          <Route path="history" element={<HistoryLog />} />
+          <Route path="billing" element={<TutorBilling />} />
+          <Route path="edit-log" element={<EditTimeLog />} />
+        </Routes>
       </main>
     </div>
   );

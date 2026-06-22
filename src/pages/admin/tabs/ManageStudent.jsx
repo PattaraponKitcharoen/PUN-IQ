@@ -3,7 +3,7 @@ import { supabase } from '../../../lib/supabase';
 import AddStudentModal from '../modals/AddStudentModal';
 import EditStudentInfoModal from '../modals/EditStudentInfoModal';
 import ConfirmResetPasswordModal from '../modals/ConfirmResetPasswordModal'; 
-// 🔴 1. Import Modal ตัวใหม่
+import ConfirmDeleteStudentModal from '../modals/ConfirmDeleteStudentModal';
 import EditStudentAccountModal from '../modals/EditStudentAccountModal';
 
 export default function ManageStudent() {
@@ -20,6 +20,8 @@ export default function ManageStudent() {
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState(null);
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -78,6 +80,11 @@ export default function ManageStudent() {
 
   const toggleSortOrder = () => {
     setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+  };
+
+  const handleOpenDelete = (student) => {
+    setSelectedStudent(student);
+    setShowDeleteModal(true);
   };
 
   return (
@@ -156,6 +163,12 @@ export default function ManageStudent() {
                       <button onClick={() => { setSelectedStudent(student); setShowEditPasswordModal(true); }} title="เปลี่ยนรหัสผ่าน" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                       </button>
+
+                      <button onClick={() => handleOpenDelete(student)} title="ลบข้อมูลนักเรียน" className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -199,6 +212,12 @@ export default function ManageStudent() {
       
       {/* 🔴 5. เรียกใช้ Modal ตัวใหม่ */}
       <EditStudentAccountModal isOpen={showEditAccountModal} onClose={() => setShowEditAccountModal(false)} student={selectedStudent} onSuccess={fetchStudents} />
+      <ConfirmDeleteStudentModal 
+        isOpen={showDeleteModal} 
+        onClose={() => setShowDeleteModal(false)} 
+        student={selectedStudent} 
+        onSuccess={fetchStudents} 
+      />
     </div>
   );
 }
