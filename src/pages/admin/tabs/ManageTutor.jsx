@@ -5,6 +5,7 @@ import EditTutorInfoModal from '../modals/EditTutorInfoModal';
 import ConfirmResetPasswordModal from '../modals/ConfirmResetPasswordModal';
 import TutorLogModal from '../modals/TutorLogModal';
 import ConfirmDeleteTutorModal from '../modals/ConfirmDeleteTutorModal';
+import EditTutorFinanceModal from '../modals/EditTutorFinanceModal'; // 🔴 1. นำเข้า Modal การเงิน
 
 export default function ManageTutor() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -16,6 +17,7 @@ export default function ManageTutor() {
 
   const [showEditInfoModal, setShowEditInfoModal] = useState(false);
   const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
+  const [showEditFinanceModal, setShowEditFinanceModal] = useState(false); // 🔴 2. State เปิดปิดหน้าต่างการเงิน
   const [selectedTutor, setSelectedTutor] = useState(null);
 
   const [showLogModal, setShowLogModal] = useState(false);
@@ -38,18 +40,17 @@ export default function ManageTutor() {
     const from = (currentPage - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
+    // 🔴 3. ดึงฟิลด์การเงินมาด้วยเพื่อแสดงผลใน Modal ได้เลย
     let query = supabase
       .from('users')
-      .select('id, name, username, phone, email', { count: 'exact' })
+      .select('id, name, username, phone, email, bank_name, account_name, account_number, qr_code_url', { count: 'exact' })
       .eq('role', 'tutor');
 
-    // 🔴 1. สร้างฟังก์ชันล้างอักขระพิเศษที่อาจเป็นอันตราย
     const sanitizeSearch = (term) => {
       return term.replace(/[%_(),.*!]/g, '');
     };
 
     if (searchTerm) {
-      // 🔴 2. ทำความสะอาดข้อความก่อนนำไปใช้งาน
       const safeTerm = sanitizeSearch(searchTerm);
       if (safeTerm.length > 0) {
         query = query.or(`username.ilike.%${safeTerm}%,name.ilike.%${safeTerm}%`);
@@ -106,6 +107,12 @@ export default function ManageTutor() {
     setShowDeleteModal(true);
   };
 
+  // 🔴 4. ฟังก์ชันเปิดหน้าต่างการเงิน
+  const handleOpenEditFinance = (tutor) => {
+    setSelectedTutor(tutor);
+    setShowEditFinanceModal(true);
+  };
+
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -135,7 +142,7 @@ export default function ManageTutor() {
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
         {loading ? (
           <div className="p-12 text-center text-gray-500 animate-pulse">กำลังโหลดข้อมูลรายชื่อคุณครู...</div>
-        ) : tutors.length === 0 ? ( // 🔴 ปรับปรุง: เปลี่ยนมาตรวจสอบจากข้อมูลจริง (tutors) ตรงๆ
+        ) : tutors.length === 0 ? (
           <div className="p-12 text-center text-gray-400 border-dashed border-gray-300">{searchTerm ? 'ไม่พบข้อมูลที่ค้นหา' : 'ยังไม่มีข้อมูลคุณครูในระบบ'}</div>
         ) : (
           <div className="overflow-x-auto">
@@ -150,7 +157,7 @@ export default function ManageTutor() {
                     </div>
                   </th>
                   <th className="p-4 font-semibold">อีเมล</th>
-                  <th className="p-4 font-semibold text-center w-40">จัดการ</th>
+                  <th className="p-4 font-semibold text-center w-52">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -159,10 +166,18 @@ export default function ManageTutor() {
                     <td className="p-4 text-gray-800 font-medium">{tutor.name || '-'}</td>
                     <td className="p-4 text-gray-600">{tutor.username}</td>
                     <td className="p-4 text-gray-600">{tutor.email}</td>
-                    <td className="p-4 flex items-center justify-center space-x-2">
-                      <button onClick={() => handleOpenEditInfo(tutor)} title="แก้ไขข้อมูล" className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition">
+                    <td className="p-4 flex items-center justify-center space-x-1">
+                      <button onClick={() => handleOpenEditInfo(tutor)} title="แก้ไขข้อมูลพื้นฐาน" className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
+                      
+                      {/* 🔴 5. เพิ่มปุ่มจัดการการเงิน (ไอคอนเงิน) สีเขียวโดดเด่น */}
+                      <button onClick={() => handleOpenEditFinance(tutor)} title="จัดการบัญชี / QR Code" className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </button>
+
                       <button onClick={() => handleOpenEditPassword(tutor)} title="เปลี่ยนรหัสผ่าน" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                       </button>
@@ -221,6 +236,14 @@ export default function ManageTutor() {
       <EditTutorInfoModal 
         isOpen={showEditInfoModal} 
         onClose={() => setShowEditInfoModal(false)} 
+        tutor={selectedTutor}
+        onSuccess={fetchTutors} 
+      />
+
+      {/* 🔴 6. เพิ่ม Modal จัดการการเงินที่นี่ */}
+      <EditTutorFinanceModal 
+        isOpen={showEditFinanceModal} 
+        onClose={() => setShowEditFinanceModal(false)} 
         tutor={selectedTutor}
         onSuccess={fetchTutors} 
       />

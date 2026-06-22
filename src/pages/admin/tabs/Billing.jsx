@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 import StudentInvoiceModal from '../modals/StudentInvoiceModal';
+import TutorPayslipModal from '../modals/TutorPayslipModal';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState('tutor');
-  
   const [tutors, setTutors] = useState([]);
   const [students, setStudents] = useState([]);
-  
   const [companyAccounts, setCompanyAccounts] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useState('');
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showTutorModal, setShowTutorModal] = useState(false);
   
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -21,51 +24,50 @@ export default function Billing() {
 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
 
-  // 🔴 แก้บัค: เปลี่ยนชื่อตัวแปรเป็น itemId เพื่อป้องกันการตีกันของ ReferenceError id
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]);
+  };
+
   const toggleRow = (logId) => {
-    setExpandedLogs(prev => prev.includes(logId) ? prev.filter(itemId => itemId !== logId) : [...prev, logId]);
+    setExpandedLogs(prev => prev.includes(logId) ? prev.filter(id => id !== logId) : [...prev, logId]);
   };
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      const [
-        { data: tutorsData },
-        { data: studentsData },
-        { data: accountsData }
-      ] = await Promise.all([
-        supabase.from('users').select('id, name, username').eq('role', 'tutor').order('name'),
-        // 🔴 1. เพิ่มการดึง company_account_id ออกมาด้วย
+      const [tutorsRes, studentsRes, accountsRes] = await Promise.all([
+        supabase.from('users').select('id, name, username, bank_name, account_name, account_number, qr_code_url').eq('role', 'tutor').order('name'),
         supabase.from('users').select('id, name, username, grade, company_account_id').eq('role', 'student').order('grade'),
         supabase.from('company_accounts').select('*').eq('is_active', true)
       ]);
       
-      if (tutorsData) setTutors(tutorsData);
-      if (studentsData) setStudents(studentsData);
-      if (accountsData) {
-        setCompanyAccounts(accountsData);
-        if (accountsData.length > 0) setSelectedAccountId(accountsData[0].id);
+      if (tutorsRes.data) setTutors(tutorsRes.data);
+      if (studentsRes.data) setStudents(studentsRes.data);
+      if (accountsRes.data) {
+        setCompanyAccounts(accountsRes.data);
+        if (accountsRes.data.length > 0) setSelectedAccountId(accountsRes.data[0].id);
       }
     };
     fetchInitialData();
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'student' && selectedUserId && companyAccounts.length > 0) {
-      const student = students.find(s => s.id === selectedUserId);
-      if (student && student.company_account_id) {
-        const matchedAccount = companyAccounts.find(acc => acc.id === student.company_account_id);
-        setSelectedAccountId(matchedAccount ? matchedAccount.id : companyAccounts[0].id);
-      } else {
-        setSelectedAccountId(companyAccounts[0].id);
-      }
-    }
-  }, [selectedUserId, activeTab, students, companyAccounts]);
+  const filteredUsers = useMemo(() => {
+    const list = activeTab === 'tutor' ? tutors : students;
+    if (!searchQuery) return list.slice(0, 10); 
+    return list.filter(u => 
+      u.username.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    ).slice(0, 10); 
+  }, [searchQuery, tutors, students, activeTab]);
 
   useEffect(() => {
     setSelectedUserId('');
+    setSearchQuery(''); 
     setLogs([]);
+    setExpandedGroups([]);
     setExpandedLogs([]);
   }, [activeTab]);
 
@@ -77,28 +79,19 @@ export default function Billing() {
 
     const fetchBillingLogs = async () => {
       setLoading(true);
-      // 🔴 แก้ไขการคำนวณวันสิ้นเดือน ไม่ให้โดน Timezone เลื่อนวัน
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
       const lastDay = new Date(Number(year), Number(month), 0).getDate();
       const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
 
       let query = supabase.from('teaching_logs');
-
       if (activeTab === 'tutor') {
-        query = query
-          .select('*, users!teaching_logs_student_id_fkey(name, username, grade), subjects(subject_name), custom_courses(course_name, grade_level)')
-          .eq('tutor_id', selectedUserId);
+        query = query.select('*, users!teaching_logs_student_id_fkey(name, username, grade), subjects(subject_name), custom_courses(course_name, grade_level)').eq('tutor_id', selectedUserId);
       } else {
-        query = query
-          .select('*, users!teaching_logs_tutor_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
-          .eq('student_id', selectedUserId);
+        query = query.select('*, users!teaching_logs_tutor_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)').eq('student_id', selectedUserId);
       }
 
-      query = query
-        .gte('teaching_date', startDate)
-        .lte('teaching_date', endDate)
-        .order('teaching_date', { ascending: true });
+      query = query.gte('teaching_date', startDate).lte('teaching_date', endDate).order('teaching_date', { ascending: true });
 
       const { data, error } = await query;
       if (!error && data) setLogs(data);
@@ -106,60 +99,69 @@ export default function Billing() {
     };
 
     fetchBillingLogs();
-  }, [selectedUserId, selectedMonth, activeTab]);
+  }, [selectedUserId, selectedMonth]);
 
-  const selectedUserDetails = activeTab === 'tutor' 
-    ? tutors.find(t => t.id === selectedUserId)
-    : students.find(s => s.id === selectedUserId);
+  const selectedUserDetails = useMemo(() => {
+    const list = activeTab === 'tutor' ? tutors : students;
+    return list.find(u => u.id === selectedUserId);
+  }, [selectedUserId, activeTab, tutors, students]);
 
   const selectedAccountDetails = companyAccounts.find(acc => acc.id === selectedAccountId);
 
-  const calculateBilling = () => {
-    let totalHrs = 0;
-    let totalAmt = 0;
+  const { totalHrs, totalAmt, logsWithCalculation, groupedLogs } = useMemo(() => {
+    let tHrs = 0;
+    let tAmt = 0;
+    const groupedObj = {};
+    const computedLogs = []; 
 
-    const logsWithCalculation = logs.map(log => {
-      const ratePerHour = activeTab === 'tutor' 
-        ? (log.applied_tutor_rate || 0) 
-        : (log.applied_student_rate || 0);
-      
-      // 🔴 ปรับปรุง: ดึงระดับชั้นจากล็อกการสอนที่ครูเลือกโดยตรง (log.grade_level)
-      const grade = log.learning_type === 'course'
-        ? log.custom_courses?.grade_level
-        : log.grade_level;
-      
+    logs.forEach(log => {
+      const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
+      const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
       const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
-      totalHrs += Number(log.duration_hours);
-      totalAmt = Math.round((totalAmt + amount) * 100) / 100;
+      
+      tHrs += Number(log.duration_hours);
+      tAmt += amount;
 
-      return { ...log, grade, ratePerHour, amount };
+      const processedLog = { ...log, grade, ratePerHour, amount };
+      computedLogs.push(processedLog); 
+
+      const counterpartyId = activeTab === 'tutor' ? log.student_id : log.tutor_id;
+      
+      {/* 🔴 1. ปรับปรุง: เพิ่ม grade เข้าไปในเงื่อนไขการ Group Key เพื่อแยกกลุ่มระดับชั้นออกจากกัน */}
+      const groupKey = `${counterpartyId}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${ratePerHour}_${grade || 'no-grade'}`;
+
+      if (!groupedObj[groupKey]) {
+        groupedObj[groupKey] = {
+          id: groupKey,
+          users: log.users,
+          learning_type: log.learning_type,
+          subjects: log.subjects,
+          custom_courses: log.custom_courses,
+          grade: grade,
+          ratePerHour: ratePerHour,
+          total_duration: 0,
+          total_amount: 0,
+          sessions: []
+        };
+      }
+      groupedObj[groupKey].total_duration += Number(log.duration_hours);
+      groupedObj[groupKey].total_amount += amount;
+      groupedObj[groupKey].sessions.push(processedLog);
     });
 
-    return { totalHrs, totalAmt, logsWithCalculation };
-  };
-
-  const { totalHrs, totalAmt, logsWithCalculation } = calculateBilling();
+    return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs, groupedLogs: Object.values(groupedObj) };
+  }, [logs, activeTab]);
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto pb-20">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">ระบบการเงินและบิลลิ่ง (Billing)</h1>
-        <p className="text-gray-500 mt-1">สรุปยอดชั่วโมงการสอนและคำนวณค่าตอบแทน/ค่าเรียนตามอัตราตั้งต้นอัตโนมัติ</p>
+        <p className="text-gray-500 mt-1">สรุปยอดชั่วโมงการสอนและคำนวณค่าตอบแทน/ค่าเรียนอัตโนมัติ</p>
       </div>
 
       <div className="flex border-b border-gray-200 mb-6">
-        <button
-          onClick={() => setActiveTab('tutor')}
-          className={`py-3 px-6 font-bold text-sm border-b-2 transition-colors ${activeTab === 'tutor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-        >
-          สรุปค่าตอบแทนคุณครู (Tutor)
-        </button>
-        <button
-          onClick={() => setActiveTab('student')}
-          className={`py-3 px-6 font-bold text-sm border-b-2 transition-colors ${activeTab === 'student' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-        >
-          สรุปค่าเรียนนักเรียน (Student)
-        </button>
+        <button onClick={() => setActiveTab('tutor')} className={`py-3 px-6 font-bold text-sm border-b-2 transition-colors ${activeTab === 'tutor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>สรุปค่าตอบแทนคุณครู</button>
+        <button onClick={() => setActiveTab('student')} className={`py-3 px-6 font-bold text-sm border-b-2 transition-colors ${activeTab === 'student' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>สรุปค่าเรียนนักเรียน</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -171,32 +173,39 @@ export default function Billing() {
                 <label className="block text-xs font-bold text-gray-600 mb-1">ประจำเดือน</label>
                 <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">
-                  {activeTab === 'tutor' ? 'เลือกคุณครู' : 'เลือกนักเรียน'}
-                </label>
-                <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-gray-50">
-                  <option value="">-- กรุณาเลือก --</option>
-                  {activeTab === 'tutor' 
-                    ? tutors.map(t => <option key={t.id} value={t.id}>{t.name || t.username}</option>)
-                    : students.map(s => <option key={s.id} value={s.id}>{s.name || s.username} ({s.grade || '-'})</option>)
-                  }
-                </select>
+              
+              <div className="relative">
+                <label className="block text-xs font-bold text-gray-600 mb-1">ค้นหา {activeTab === 'tutor' ? 'คุณครู' : 'นักเรียน'}</label>
+                <input 
+                  type="text" 
+                  placeholder="พิมพ์ Username หรือคลิกเพื่อเลือก..." 
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setShowDropdown(true); }}
+                  onFocus={() => setShowDropdown(true)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                {showDropdown && (
+                  <div className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {filteredUsers.length > 0 ? (
+                      filteredUsers.map(u => (
+                        <div key={u.id} className="p-3 hover:bg-indigo-50 cursor-pointer border-b border-gray-50 last:border-0" onClick={() => { setSelectedUserId(u.id); setSearchQuery(u.username); setShowDropdown(false); }}>
+                          <p className="text-sm font-bold text-gray-800">{u.username}</p>
+                          <p className="text-xs text-gray-500">{u.name || '-'}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-gray-400 text-xs">ไม่พบรายชื่อที่ค้นหา</div>
+                    )}
+                  </div>
+                )}
+                {showDropdown && <div className="fixed inset-0 z-20" onClick={() => setShowDropdown(false)}></div>}
               </div>
 
               {activeTab === 'student' && companyAccounts.length > 0 && (
                 <div className="pt-3 border-t border-gray-100 mt-2">
-                  <label className="block text-xs font-bold text-gray-600 mb-1 text-amber-700">เลือกบัญชีรับเงิน (แสดงบนบิล)</label>
-                  <select 
-                    value={selectedAccountId} 
-                    onChange={(e) => setSelectedAccountId(e.target.value)} 
-                    className="w-full px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 font-medium text-gray-700"
-                  >
-                    {companyAccounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.bank_name} - {acc.account_number}
-                      </option>
-                    ))}
+                  <label className="block text-xs font-bold text-gray-600 mb-1 text-amber-700">บัญชีรับเงิน (แสดงบนบิล)</label>
+                  <select value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)} className="w-full px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 font-medium text-gray-700">
+                    {companyAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bank_name} - {acc.account_number}</option>)}
                   </select>
                 </div>
               )}
@@ -208,14 +217,12 @@ export default function Billing() {
               <h2 className={`text-sm font-bold uppercase mb-4 ${activeTab === 'tutor' ? 'text-indigo-800' : 'text-amber-800'}`}>สรุปยอดเงินเดือนนี้</h2>
               <div className="space-y-4">
                 <div className="flex justify-between items-center bg-white/60 p-3 rounded-lg">
-                  <span className="text-sm text-gray-600 font-bold">รวมเวลาทั้งหมด:</span>
+                  <span className="text-sm text-gray-600 font-bold">เวลาทั้งหมด:</span>
                   <span className="font-bold text-lg">{totalHrs} ชม.</span>
                 </div>
                 <div className="pt-2 border-t border-gray-200/50">
-                  <span className="block text-xs font-bold text-gray-500 mb-1">ยอดสุทธิที่ต้องชำระ:</span>
-                  <span className={`block text-3xl font-black ${activeTab === 'tutor' ? 'text-indigo-700' : 'text-amber-600'}`}>
-                    ฿{totalAmt.toLocaleString()}
-                  </span>
+                  <span className="block text-xs font-bold text-gray-500 mb-1">ยอดสุทธิรวม:</span>
+                  <span className={`block text-3xl font-black ${activeTab === 'tutor' ? 'text-indigo-700' : 'text-amber-600'}`}>฿{totalAmt.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -226,7 +233,8 @@ export default function Billing() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[500px]">
             {!selectedUserId ? (
               <div className="h-full flex flex-col items-center justify-center text-gray-400 py-20">
-                <p>กรุณาเลือก{activeTab === 'tutor' ? 'คุณครู' : 'นักเรียน'}เพื่อดูรายละเอียดบิลลิ่ง</p>
+                <div className="bg-gray-50 p-6 rounded-full mb-4">🔍</div>
+                <p>กรุณาค้นหาและเลือก {activeTab === 'tutor' ? 'คุณครู' : 'นักเรียน'} เพื่อดูรายละเอียด</p>
               </div>
             ) : loading ? (
               <div className="text-center py-20 text-gray-400 animate-pulse">กำลังคำนวณยอดเงิน...</div>
@@ -235,14 +243,9 @@ export default function Billing() {
                 <div className="flex justify-between items-start mb-6 border-b pb-4">
                   <div>
                     <div className="flex items-center space-x-4">
-                      <h2 className="text-xl font-bold text-gray-800">
-                        ใบแจ้งยอด {activeTab === 'tutor' ? 'ค่าตอบแทนผู้สอน' : 'ค่าธรรมเนียมการเรียน'}
-                      </h2>
-                      {activeTab === 'student' && logsWithCalculation.length > 0 && (
-                        <button 
-                          onClick={() => setShowInvoiceModal(true)}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-1.5 px-4 rounded-lg text-sm shadow-sm transition flex items-center space-x-2"
-                        >
+                      <h2 className="text-xl font-bold text-gray-800">แจ้งยอด {activeTab === 'tutor' ? 'ค่าตอบแทน' : 'ค่าเรียน'} : {selectedUserDetails?.username}</h2>
+                      {groupedLogs.length > 0 && (
+                        <button onClick={() => activeTab === 'tutor' ? setShowTutorModal(true) : setShowInvoiceModal(true)} className={`font-semibold py-1.5 px-4 rounded-lg text-sm shadow-sm transition flex items-center space-x-2 text-white ${activeTab === 'tutor' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                           <span>ดูบิลฉบับสมบูรณ์</span>
                         </button>
@@ -252,78 +255,69 @@ export default function Billing() {
                   </div>
                 </div>
 
-                {logsWithCalculation.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                    ไม่มีประวัติการสอนในเดือนนี้
-                  </div>
+                {groupedLogs.length === 0 ? (
+                  <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">ไม่มีประวัติการสอนในเดือนนี้</div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm border-collapse">
+                    <table className="w-full text-left text-sm border-collapse table-auto">
                       <thead className="bg-gray-100 text-gray-600 border-b-2 border-gray-200">
                         <tr>
                           <th className="p-3 w-10"></th> 
-                          <th className="p-3 font-bold">วันที่</th>
+                          <th className="p-3 font-bold whitespace-nowrap">จำนวน</th>
                           <th className="p-3 font-bold">{activeTab === 'tutor' ? 'สอนนักเรียน' : 'สอนโดยคุณครู'}</th>
                           <th className="p-3 font-bold">วิชา / คอร์ส</th>
-                          <th className="p-3 font-bold">ระดับชั้น</th>
-                          <th className="p-3 font-bold text-center">ชม.</th>
-                          <th className="p-3 font-bold text-right">เรท/ชม.</th>
-                          <th className="p-3 font-bold text-right">จำนวนเงิน</th>
+                          <th className="p-3 font-bold">ระดับ</th>
+                          <th className="p-3 font-bold text-center">รวมชม.</th>
+                          <th className="p-3 font-bold text-right">เรท</th>
+                          <th className="p-3 font-bold text-right">รวมเงิน</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {logsWithCalculation.map(log => (
-                          <React.Fragment key={log.id}>
-                            <tr onClick={() => toggleRow(log.id)} className="hover:bg-gray-50 cursor-pointer transition-colors group">
+                        {groupedLogs.map(group => (
+                          <React.Fragment key={group.id}>
+                            <tr onClick={() => toggleGroup(group.id)} className={`cursor-pointer transition-colors ${expandedGroups.includes(group.id) ? 'bg-indigo-50/50' : 'hover:bg-gray-50'}`}>
                               <td className="p-3 text-center">
-                                <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedLogs.includes(log.id) ? 'rotate-90 text-blue-500' : 'group-hover:text-blue-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-indigo-600' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                               </td>
-                              <td className="p-3 whitespace-nowrap text-gray-600">
-                                {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
-                              </td>
-                              <td className="p-3 font-semibold text-gray-800">
-                                {log.users?.name || log.users?.username}
-                              </td>
+                              <td className="p-3 whitespace-nowrap font-bold text-indigo-600">{group.sessions.length} ครั้ง</td>
+                              <td className="p-3 font-bold text-gray-900">{group.users?.name || group.users?.username}</td>
                               <td className="p-3">
-                                {log.learning_type === 'course' ? (
-                                  <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                    🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'}
-                                  </span>
-                                ) : (
-                                  <div className="flex items-center space-x-1.5">
-                                    <span className={`text-[10px] px-1 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                      {log.learning_type === 'advanced' ? 'Adv' : 'Gen'}
-                                    </span>
-                                    <span className="text-gray-800 font-medium">{log.subjects?.subject_name || '-'}</span>
-                                  </div>
-                                )}
+                                {group.learning_type === 'course' ? <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">🏆 {group.custom_courses?.course_name}</span> : 
+                                <div className="flex items-center gap-1.5"><span className={`text-[10px] px-1 rounded font-bold ${group.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{group.learning_type === 'advanced' ? 'Adv' : 'Gen'}</span><span className="text-gray-800 font-medium">{group.subjects?.subject_name}</span></div>}
                               </td>
-                              <td className="p-3 text-gray-600 font-medium">{log.grade || '-'}</td>
-                              <td className="p-3 text-center font-bold">{log.duration_hours}</td>
-                              <td className="p-3 text-right text-gray-500">฿{log.ratePerHour}</td>
-                              <td className="p-3 text-right font-bold text-gray-800">฿{log.amount.toLocaleString()}</td>
+                              <td className="p-3 text-gray-600">{group.grade || '-'}</td>
+                              <td className="p-3 text-center font-black text-gray-800">{group.total_duration}</td>
+                              <td className="p-3 text-right text-gray-500">฿{group.ratePerHour}</td>
+                              <td className="p-3 text-right font-black text-gray-800">฿{group.total_amount.toLocaleString()}</td>
                             </tr>
-                            
-                            {expandedLogs.includes(log.id) && (
-                              <tr className="bg-blue-50/40 border-b border-blue-100">
-                                <td colSpan="8" className="p-4 px-12 text-sm">
-                                  <div className="flex flex-col space-y-2 text-gray-700">
-                                    <div className="flex items-center">
-                                      <span className="font-bold text-blue-800 w-16">เวลา:</span>
-                                      <span className="text-gray-700 font-medium">
-                                        {log.start_time ? log.start_time.substring(0, 5) : '-'} น. ถึง {log.end_time ? log.end_time.substring(0, 5) : '-'} น.
-                                      </span>
+                            {expandedGroups.includes(group.id) && group.sessions.map((session, index) => (
+                              <React.Fragment key={session.id}>
+                                <tr onClick={() => toggleRow(session.id)} className="bg-slate-50/50 hover:bg-slate-100 cursor-pointer border-l-4 border-indigo-300">
+                                  <td className="p-2 border-r border-gray-200"></td>
+                                  <td colSpan="4" className="p-2.5 px-4 text-gray-600 font-medium">
+                                    <div className="flex items-center gap-2">
+                                      <svg className={`w-3 h-3 transition-transform ${expandedLogs.includes(session.id) ? 'rotate-90 text-blue-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                      {/* 🔴 2. ปรับปรุง: แสดงระดับชั้นรายคาบ (session.grade) ต่อท้ายวันที่สอนใน Dropdown ชั้นที่ 2 */}
+                                      <span>ครั้งที่ {index + 1} : {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long' })}{session.grade ? ` (${session.grade})` : ''}</span>
                                     </div>
-                                    <div className="flex items-start">
-                                      <span className="font-bold text-blue-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
-                                      <span className="text-gray-600 italic bg-white px-3 py-1.5 rounded border border-gray-100 shadow-sm w-full">
-                                        {log.topic || 'ไม่ได้ระบุรายละเอียดเนื้อหา'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
+                                  </td>
+                                  <td className="p-2.5 text-center font-bold text-gray-700">{session.duration_hours}</td>
+                                  <td className="p-2.5 text-right text-gray-400 text-xs">฿{session.ratePerHour}</td>
+                                  <td className="p-2.5 text-right font-bold text-gray-700">฿{session.amount.toLocaleString()}</td>
+                                </tr>
+                                {expandedLogs.includes(session.id) && (
+                                  <tr className="bg-white border-b border-gray-100 border-l-4 border-indigo-300">
+                                    <td className="border-r border-gray-200"></td>
+                                    <td colSpan="7" className="p-3 px-10 text-sm">
+                                      <div className="flex flex-col space-y-1.5 text-gray-700 bg-gray-50 p-3 rounded border border-gray-100 shadow-sm">
+                                        <div className="flex items-center gap-2"><span className="font-bold text-blue-800 text-xs">เวลา:</span><span className="text-gray-700 text-xs">{session.start_time?.substring(0, 5)} - {session.end_time?.substring(0, 5)} น.</span></div>
+                                        <div className="flex items-start gap-2"><span className="font-bold text-blue-800 text-xs shrink-0 mt-0.5">เนื้อหา:</span><span className="text-gray-600 italic text-xs leading-relaxed">{session.topic || '-'}</span></div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            ))}
                           </React.Fragment>
                         ))}
                       </tbody>
@@ -334,6 +328,7 @@ export default function Billing() {
             )}
           </div>
         </div>
+      </div>
 
       <StudentInvoiceModal 
         isOpen={showInvoiceModal} 
@@ -345,7 +340,14 @@ export default function Billing() {
         companyAccount={selectedAccountDetails}
       />
 
-      </div>
+      <TutorPayslipModal 
+        isOpen={showTutorModal} 
+        onClose={() => setShowTutorModal(false)}
+        tutor={selectedUserDetails}
+        logs={logsWithCalculation}
+        totalAmount={totalAmt}
+        billingMonth={selectedMonth}
+      />
     </div>
   );
 }

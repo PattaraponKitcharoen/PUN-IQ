@@ -4,11 +4,10 @@ import { supabase } from '../../../lib/supabase';
 export default function EditTutorInfoModal({ isOpen, onClose, tutor, onSuccess }) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState(''); // 🔴 2. เพิ่ม State สำหรับอีเมล
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // โหลดข้อมูลเก่ามาใส่ในช่องกรอกเมื่อเปิด Modal
   useEffect(() => {
     if (tutor) {
       setName(tutor.name || '');
@@ -39,7 +38,9 @@ export default function EditTutorInfoModal({ isOpen, onClose, tutor, onSuccess }
           },
           body: JSON.stringify({
             targetUserId: tutor.id,
-            email, name, username
+            email, 
+            name, 
+            username
           })
         }
       );
@@ -73,36 +74,18 @@ export default function EditTutorInfoModal({ isOpen, onClose, tutor, onSuccess }
 
           <div>
             <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-2">อีเมล (Email)</label>
-            {/* 🔴 4. ปลดล็อกช่องอีเมลให้แก้ไขได้ */}
-            <input 
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-              required 
-            />
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
           </div>
 
-          <div>
-            <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-2">ชื่อ - นามสกุล</label>
-            <input 
-              type="text" 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-              required 
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-2">ชื่อผู้ใช้งาน (Username)</label>
-            <input 
-              type="text" 
-              value={username} 
-              onChange={(e) => setUsername(e.target.value)} 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
-              required 
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-2">ชื่อ - นามสกุล</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+            <div>
+              <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-2">ชื่อผู้ใช้งาน</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
           </div>
 
           <div className="flex space-x-3 pt-2">

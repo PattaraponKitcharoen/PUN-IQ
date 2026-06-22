@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function TutorEarnings() {
@@ -11,11 +11,17 @@ export default function TutorEarnings() {
 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // 🔴 1. เพิ่ม State สำหรับจัดการ Dropdown 3 ชั้น
+  const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
 
-  // ระบบ Toggle แถวเพื่อดูรายละเอียดเนื้อหาที่สอน
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(i => i !== groupId) : [...prev, groupId]);
+  };
+
   const toggleRow = (logId) => {
-    setExpandedLogs(prev => prev.includes(logId) ? prev.filter(itemId => itemId !== logId) : [...prev, logId]);
+    setExpandedLogs(prev => prev.includes(logId) ? prev.filter(i => i !== logId) : [...prev, logId]);
   };
 
   useEffect(() => {
@@ -38,7 +44,6 @@ export default function TutorEarnings() {
 
     const fetchMyTeachingLogs = async () => {
       setLoading(true);
-      // 🔴 แก้ไขการคำนวณวันสิ้นเดือน ไม่ให้โดน Timezone เลื่อนวัน
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
       const lastDay = new Date(Number(year), Number(month), 0).getDate();
@@ -46,7 +51,6 @@ export default function TutorEarnings() {
 
       const { data, error } = await supabase
         .from('teaching_logs')
-        // 🔴 ดึงข้อมูลชื่อนักเรียนผ่าน Foreign Key student_id
         .select('*, users!teaching_logs_student_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
         .eq('tutor_id', sessionUser.id)
         .gte('teaching_date', startDate)
@@ -68,17 +72,13 @@ export default function TutorEarnings() {
     let totalEarnings = 0;
 
     const logsWithCalculation = logs.map(log => {
-      // ใช้เรทค่าจ้างครู (Tutor Rate) ในการคำนวณรายได้
       const ratePerHour = log.applied_tutor_rate || 0;
-      
       const grade = log.learning_type === 'course'
         ? log.custom_courses?.grade_level
         : log.grade_level;
       
       const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
       totalHrs += Number(log.duration_hours);
-      
-      // 🔴 แก้ไขตรงนี้: เปลี่ยนจาก totalAmt เป็น totalEarnings
       totalEarnings = Math.round((totalEarnings + amount) * 100) / 100;
 
       return { ...log, grade, ratePerHour, amount };
@@ -89,6 +89,36 @@ export default function TutorEarnings() {
 
   const { totalHrs, totalEarnings, logsWithCalculation } = calculateEarnings();
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
+
+  // 🔴 2. เพิ่มตรรกะการ Grouping แบบเดียวกับหน้า Payslip
+  const groupedLogs = useMemo(() => {
+    const groupedObj = {};
+    
+    logsWithCalculation.forEach(log => {
+      const groupKey = `${log.student_id}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${log.ratePerHour}`;
+
+      if (!groupedObj[groupKey]) {
+        groupedObj[groupKey] = {
+          id: groupKey,
+          users: log.users,
+          learning_type: log.learning_type,
+          subjects: log.subjects,
+          custom_courses: log.custom_courses,
+          grade: log.grade,
+          ratePerHour: log.ratePerHour,
+          total_duration: 0,
+          total_amount: 0,
+          sessions: []
+        };
+      }
+      
+      groupedObj[groupKey].total_duration += Number(log.duration_hours);
+      groupedObj[groupKey].total_amount += Number(log.amount);
+      groupedObj[groupKey].sessions.push(log);
+    });
+
+    return Object.values(groupedObj);
+  }, [logsWithCalculation]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -145,7 +175,7 @@ export default function TutorEarnings() {
                  <svg className="w-10 h-10 text-emerald-300 mb-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                  <p>กำลังดึงข้อมูลรายได้ของคุณ...</p>
               </div>
-            ) : logsWithCalculation.length === 0 ? (
+            ) : groupedLogs.length === 0 ? (
               <div className="text-center py-16 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center">
                  <span className="text-4xl mb-3">📅</span>
                  <p className="font-medium text-gray-600">ไม่มีประวัติการสอนในเดือนนี้</p>
@@ -153,76 +183,96 @@ export default function TutorEarnings() {
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-200">
+                {/* 🔴 3. โครงสร้างตารางใหม่ รองรับ 3-tier dropdown */}
                 <table className="w-full text-left text-sm border-collapse">
                   <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 uppercase tracking-wider text-[11px]">
                     <tr>
-                      <th className="p-3 w-10 text-center">ดู</th> 
-                      <th className="p-3 font-bold whitespace-nowrap">วันที่สอน</th>
-                      <th className="p-3 font-bold">วิชา / คอร์ส</th>
+                      <th className="p-3 w-10 text-center"></th> 
+                      <th className="p-3 font-bold whitespace-nowrap">จำนวนครั้ง</th>
                       <th className="p-3 font-bold">สอนนักเรียน</th>
-                      <th className="p-3 font-bold text-center">ชม.</th>
+                      <th className="p-3 font-bold">วิชา / คอร์ส</th>
+                      <th className="p-3 font-bold text-center">รวม ชม.</th>
                       <th className="p-3 font-bold text-right">เรท/ชม.</th>
-                      <th className="p-3 font-bold text-right">รายได้</th>
+                      <th className="p-3 font-bold text-right">รวมรายได้</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {logsWithCalculation.map(log => (
-                      <React.Fragment key={log.id}>
-                        <tr onClick={() => toggleRow(log.id)} className="hover:bg-emerald-50/30 cursor-pointer transition-colors group">
+                    {groupedLogs.map((group) => (
+                      <React.Fragment key={group.id}>
+                        {/* ชั้นที่ 1: แถวสรุปกลุ่มวิชา */}
+                        <tr onClick={() => toggleGroup(group.id)} className="hover:bg-emerald-50/50 cursor-pointer transition-colors group border-b border-gray-100">
                           <td className="p-3 text-center">
-                            <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedLogs.includes(log.id) ? 'rotate-90 text-emerald-600' : 'group-hover:text-emerald-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                            <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-emerald-600' : 'group-hover:text-emerald-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                           </td>
-                          <td className="p-3 whitespace-nowrap text-gray-700 font-medium">
-                            {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                          <td className="p-3 whitespace-nowrap text-emerald-800 font-bold">
+                            {group.sessions.length} ครั้ง
+                          </td>
+                          <td className="p-3 font-semibold text-indigo-700">
+                            {group.users?.name || group.users?.username || '-'}
                           </td>
                           <td className="p-3">
-                            {log.learning_type === 'course' ? (
+                            {group.learning_type === 'course' ? (
                               <span className="font-bold text-amber-700 text-xs">
-                                🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'} 
-                                <span className="text-gray-500 font-normal ml-1">({log.custom_courses?.grade_level || log.grade || '-'})</span>
+                                🏆 {group.custom_courses?.course_name || 'คอร์สพิเศษ'} 
+                                <span className="text-gray-500 font-normal ml-1">({group.custom_courses?.grade_level || group.grade || '-'})</span>
                               </span>
                             ) : (
                               <div className="flex items-center space-x-1.5 whitespace-nowrap">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                  {log.learning_type === 'advanced' ? 'Adv' : 'Gen'}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${group.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {group.learning_type === 'advanced' ? 'Adv' : 'Gen'}
                                 </span>
                                 <span className="font-medium text-gray-800">
-                                  {log.subjects?.subject_name || '-'} 
-                                  <span className="text-gray-500 font-normal text-[11px] ml-1">({log.grade || '-'})</span>
+                                  {group.subjects?.subject_name || '-'} 
+                                  <span className="text-gray-500 font-normal text-[11px] ml-1">({group.grade || '-'})</span>
                                 </span>
                               </div>
                             )}
                           </td>
-                          {/* 🔴 ดึงชื่อนักเรียนมาแสดงแทนชื่อตัวเอง */}
-                          <td className="p-3 font-semibold text-indigo-700">
-                            {log.users?.name || log.users?.username}
-                          </td>
-                          <td className="p-3 text-center font-bold text-gray-800">{log.duration_hours}</td>
-                          <td className="p-3 text-right text-gray-400 text-xs">฿{log.ratePerHour}</td>
-                          <td className="p-3 text-right font-bold text-emerald-700">฿{log.amount.toLocaleString()}</td>
+                          <td className="p-3 text-center font-bold text-gray-800">{group.total_duration}</td>
+                          <td className="p-3 text-right text-gray-400 text-xs">฿{group.ratePerHour?.toLocaleString()}</td>
+                          <td className="p-3 text-right font-bold text-emerald-700">฿{group.total_amount.toLocaleString()}</td>
                         </tr>
-                        
-                        {/* ส่วนขยายแสดงรายละเอียดเพิ่มเติม */}
-                        {expandedLogs.includes(log.id) && (
-                          <tr className="bg-emerald-50/40 border-b border-emerald-100">
-                            <td colSpan="7" className="p-4 px-12 text-sm shadow-inner">
-                              <div className="flex flex-col space-y-2 text-gray-700">
+
+                        {/* ชั้นที่ 2: แถวรายละเอียดรายวัน */}
+                        {expandedGroups.includes(group.id) && group.sessions.map((session, index) => (
+                          <React.Fragment key={session.id}>
+                            <tr onClick={() => toggleRow(session.id)} className="bg-slate-50/50 hover:bg-slate-100 cursor-pointer border-l-2 border-emerald-500 group">
+                              <td className="p-2 border-r border-gray-200"></td>
+                              <td colSpan="3" className="p-3 text-gray-600 font-medium">
                                 <div className="flex items-center">
-                                  <span className="font-bold text-emerald-800 w-16">เวลา:</span>
-                                  <span className="text-gray-700 font-medium bg-white px-2 py-0.5 rounded border border-gray-200">
-                                    {formatTime(log.start_time)} น. - {formatTime(log.end_time)} น.
-                                  </span>
+                                  <svg className={`w-3.5 h-3.5 mr-2 transition-transform ${expandedLogs.includes(session.id) ? 'rotate-90 text-emerald-600' : 'text-gray-400 group-hover:text-emerald-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                  ครั้งที่ {index + 1} : วันที่ {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
-                                <div className="flex items-start">
-                                  <span className="font-bold text-emerald-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
-                                  <span className="text-gray-600 italic bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm w-full leading-relaxed">
-                                    {log.topic || <span className="text-gray-400">คุณไม่ได้ระบุรายละเอียดเนื้อหาในคลาสนี้</span>}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
+                              </td>
+                              <td className="p-3 text-center font-bold text-gray-700">{session.duration_hours}</td>
+                              <td className="p-3 text-right text-gray-400 text-xs">฿{session.ratePerHour}</td>
+                              <td className="p-3 text-right font-bold text-gray-800">฿{session.amount.toLocaleString()}</td>
+                            </tr>
+
+                            {/* ชั้นที่ 3: แถวรายละเอียดเวลาและเนื้อหา */}
+                            {expandedLogs.includes(session.id) && (
+                              <tr className="bg-emerald-50/20 border-b border-gray-100 border-l-2 border-emerald-500">
+                                <td className="border-r border-gray-200"></td>
+                                <td colSpan="6" className="p-4 px-10 text-sm shadow-inner">
+                                  <div className="flex flex-col space-y-2 text-gray-700">
+                                    <div className="flex items-center">
+                                      <span className="font-bold text-emerald-800 w-16">เวลา:</span>
+                                      <span className="text-gray-700 font-medium bg-white px-2 py-0.5 rounded border border-emerald-100">
+                                        {formatTime(session.start_time)} น. - {formatTime(session.end_time)} น.
+                                      </span>
+                                    </div>
+                                    <div className="flex items-start">
+                                      <span className="font-bold text-emerald-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
+                                      <span className="text-gray-600 italic bg-white px-3 py-2 rounded-lg border border-emerald-100 shadow-sm w-full leading-relaxed">
+                                        {session.topic || <span className="text-gray-400">ไม่ได้ระบุรายละเอียดเนื้อหาในคลาสนี้</span>}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
                       </React.Fragment>
                     ))}
                   </tbody>

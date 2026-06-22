@@ -9,6 +9,9 @@ export default function TimeLog() {
   const [pricingRates, setPricingRates] = useState([]);
   const [customCourses, setCustomCourses] = useState([]);
 
+  // 🔴 1. State สำหรับเก็บข้อมูล Profile และสิทธิ์ VIP
+  const [tutorProfile, setTutorProfile] = useState(null);
+
   const [currentTutorId, setCurrentTutorId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,6 +62,16 @@ export default function TimeLog() {
     const { data: { session } } = await supabase.auth.getSession();
     const tutorId = session?.user?.id;
     setCurrentTutorId(tutorId);
+
+    // 🔴 2. ดึงค่า is_vip จากฐานข้อมูลเมื่อครูล็อกอิน
+    if (tutorId) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('is_vip')
+        .eq('id', tutorId)
+        .single();
+      setTutorProfile(profile);
+    }
 
     const { data: subsData } = await supabase.from('subjects').select('*').order('subject_name');
     if (subsData) setSubjectsList(subsData);
@@ -187,6 +200,11 @@ export default function TimeLog() {
           }
         }
 
+        // 🔴 3. ถ้าระบบพบว่าครูคนนี้ถูกตั้งเป็น VIP (is_vip = true) ให้เรทค่าสอนเท่ากับค่าเรียนทันที
+        if (tutorProfile?.is_vip) {
+          appliedTutorRate = appliedStudentRate;
+        }
+
         inserts.push({
           tutor_id: currentTutorId,
           student_id: sId,
@@ -200,7 +218,7 @@ export default function TimeLog() {
           custom_course_id: learningType === 'course' ? selectedCourseId : null,
           grade_level: learningType === 'course' ? null : selectedGrade,
           applied_student_rate: appliedStudentRate,
-          applied_tutor_rate: appliedTutorRate
+          applied_tutor_rate: appliedTutorRate 
         });
       }
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
-// 🔴 นำเข้า Modal ใบเสร็จ (ปรับ path ให้ตรงกับโครงสร้างโฟลเดอร์ของคุณ หากไม่ตรง)
 import StudentInvoiceModal from '../admin/modals/StudentInvoiceModal';
 
 export default function StudentDashboard() {
@@ -13,18 +12,23 @@ export default function StudentDashboard() {
 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // 🔴 1. เพิ่ม State สำหรับระบบ Dropdown 3 ชั้น
+  const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
   
-  // 🔴 State สำหรับระบบใบแจ้งหนี้
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [companyAccount, setCompanyAccount] = useState(null);
 
-  // 🔴 แก้บัคหน้าขาว: เปลี่ยนชื่อตัวแปรเป็น itemId
+  // 🔴 2. ฟังก์ชันกาง/หุบ แถวทั้ง 2 ระดับ
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]);
+  };
+
   const toggleRow = (logId) => {
     setExpandedLogs(prev => prev.includes(logId) ? prev.filter(itemId => itemId !== logId) : [...prev, logId]);
   };
 
-  // 🔴 ฟังก์ชันออกจากระบบ
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login';
@@ -32,14 +36,12 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      // 1. ดึงข้อมูล User Session
       const { data: { session } } = await supabase.auth.getSession();
       let currentUser = session?.user;
       
       if (currentUser) {
         const { data: profile } = await supabase
           .from('users')
-          // 🔴 1. เพิ่มการดึง company_account_id
           .select('id, name, username, grade, company_account_id') 
           .eq('id', currentUser.id)
           .single();
@@ -48,14 +50,12 @@ export default function StudentDashboard() {
         setSessionUser(currentUser);
       }
 
-      // 2. ดึงข้อมูลบัญชีธนาคารทั้งหมดที่ Active อยู่
       const { data: accountsData } = await supabase
         .from('company_accounts')
         .select('*')
         .eq('is_active', true);
       
       if (accountsData && accountsData.length > 0) {
-        // 🔴 2. เลือกว่าจะโชว์บัญชีไหน (บัญชีที่ผูกไว้ หรือ บัญชี Default)
         const targetAccount = accountsData.find(acc => acc.id === currentUser?.company_account_id);
         setCompanyAccount(targetAccount || accountsData[0]);
       }
@@ -68,7 +68,6 @@ export default function StudentDashboard() {
 
     const fetchMyLogs = async () => {
       setLoading(true);
-      // 🔴 แก้ไขการคำนวณวันสิ้นเดือน ไม่ให้โดน Timezone เลื่อนวัน
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
       const lastDay = new Date(Number(year), Number(month), 0).getDate();
@@ -92,14 +91,12 @@ export default function StudentDashboard() {
     fetchMyLogs();
   }, [sessionUser?.id, selectedMonth]);
 
-  // 🔴 ปรับปรุง: ใช้ useMemo ครอบการคำนวณ เพื่อป้องกันการคำนวณใหม่ทุกครั้งที่กดขยายแถว (ลดอาการหน่วง)
   const { totalHrs, totalAmt, logsWithCalculation } = useMemo(() => {
     let tHrs = 0;
     let tAmt = 0;
 
     const computedLogs = logs.map(log => {
       const ratePerHour = log.applied_student_rate || 0;
-      
       const grade = log.learning_type === 'course'
         ? log.custom_courses?.grade_level
         : log.grade_level;
@@ -112,13 +109,43 @@ export default function StudentDashboard() {
     });
 
     return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs };
-  }, [logs]); // <-- ระบบจะคำนวณใหม่ก็ต่อเมื่อตัวแปร logs มีการเปลี่ยนแปลงเท่านั้น
+  }, [logs]);
 
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
+  // 🔴 3. เพิ่มการจัดกลุ่ม (Group) สำหรับนักเรียน โดยยึดครูเป็นหลัก
+  const groupedLogs = useMemo(() => {
+    const groupedObj = {};
+    
+    logsWithCalculation.forEach(log => {
+      // สร้าง Key จัดกลุ่ม: ครู + ประเภทการเรียน + วิชา + คอร์ส + เรทราคา
+      const groupKey = `${log.tutor_id}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${log.ratePerHour}`;
+
+      if (!groupedObj[groupKey]) {
+        groupedObj[groupKey] = {
+          id: groupKey,
+          tutor: log.tutor, // เก็บข้อมูลครู
+          learning_type: log.learning_type,
+          subjects: log.subjects,
+          custom_courses: log.custom_courses,
+          grade: log.grade,
+          ratePerHour: log.ratePerHour,
+          total_duration: 0,
+          total_amount: 0,
+          sessions: []
+        };
+      }
+      
+      groupedObj[groupKey].total_duration += Number(log.duration_hours);
+      groupedObj[groupKey].total_amount += Number(log.amount);
+      groupedObj[groupKey].sessions.push(log);
+    });
+
+    return Object.values(groupedObj);
+  }, [logsWithCalculation]);
+
   const handleOpenInvoice = () => {
     const today = new Date();
-    // สร้าง String เดือนปัจจุบันในรูปแบบ YYYY-MM
     const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     
     if (selectedMonth === currentMonthStr) {
@@ -131,14 +158,12 @@ export default function StudentDashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       
-      {/* 🔴 ปรับ flex เพื่อแยกข้อความไว้ซ้าย และปุ่มไว้ขวา */}
       <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-2">สวัสดี, {sessionUser?.name || sessionUser?.username || 'นักเรียน'} 👋</h1>
           <p className="text-blue-100 opacity-90">ยินดีต้อนรับสู่ระบบประวัติการเรียนและการชำระเงิน คุณสามารถตรวจสอบรายละเอียดคลาสเรียนได้ที่นี่</p>
         </div>
         
-        {/* 🔴 ปุ่มออกจากระบบ (สไตล์โปร่งแสงกลืนกับพื้นหลัง) */}
         <button 
           onClick={handleLogout}
           className="bg-white/20 hover:bg-white/30 text-white font-semibold py-2.5 px-5 rounded-xl text-sm backdrop-blur-sm transition flex items-center space-x-2 whitespace-nowrap border border-white/10 shadow-sm"
@@ -187,12 +212,11 @@ export default function StudentDashboard() {
         <div className="lg:col-span-3">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
             
-            {/* 🔴 เพิ่มปุ่มดูใบแจ้งหนี้ */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b pb-4 space-y-4 sm:space-y-0">
               <h2 className="text-xl font-bold text-gray-800">
                 รายละเอียดการเรียน ประจำเดือน {new Date(selectedMonth + '-01').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
               </h2>
-              {logsWithCalculation.length > 0 && (
+              {groupedLogs.length > 0 && (
                 <button 
                   onClick={handleOpenInvoice}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg text-sm shadow-sm transition flex items-center space-x-2"
@@ -208,7 +232,7 @@ export default function StudentDashboard() {
                  <svg className="w-10 h-10 text-gray-300 mb-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                  <p>กำลังดึงข้อมูลประวัติการเรียนของคุณ...</p>
               </div>
-            ) : logsWithCalculation.length === 0 ? (
+            ) : groupedLogs.length === 0 ? (
               <div className="text-center py-16 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center">
                  <span className="text-4xl mb-3">📅</span>
                  <p className="font-medium text-gray-600">ไม่มีประวัติการเรียนในเดือนนี้</p>
@@ -216,76 +240,96 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-200">
+                {/* 🔴 4. โครงสร้างตารางใหม่ 3 ชั้น (Group -> Session -> Details) */}
                 <table className="w-full text-left text-sm border-collapse">
                   <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 uppercase tracking-wider text-[11px]">
                     <tr>
                       <th className="p-3 w-10 text-center">ดู</th> 
-                      <th className="p-3 font-bold whitespace-nowrap">วันที่เรียน</th>
+                      <th className="p-3 font-bold whitespace-nowrap">จำนวนครั้ง</th>
+                      <th className="p-3 font-bold">สอนโดยคุณครู</th>
                       <th className="p-3 font-bold">วิชา / คอร์ส</th>
-                      <th className="p-3 font-bold">สอนโดย</th>
-                      <th className="p-3 font-bold text-center">ชม.</th>
+                      <th className="p-3 font-bold text-center">รวม ชม.</th>
                       <th className="p-3 font-bold text-right">เรท/ชม.</th>
-                      <th className="p-3 font-bold text-right">จำนวนเงิน</th>
+                      <th className="p-3 font-bold text-right">รวมเป็นเงิน</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {logsWithCalculation.map(log => (
-                      <React.Fragment key={log.id}>
-                        <tr onClick={() => toggleRow(log.id)} className="hover:bg-blue-50/30 cursor-pointer transition-colors group">
+                    {groupedLogs.map((group) => (
+                      <React.Fragment key={group.id}>
+                        {/* ชั้นที่ 1: แถวสรุปกลุ่มวิชา */}
+                        <tr onClick={() => toggleGroup(group.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors group border-b border-gray-100">
                           <td className="p-3 text-center">
-                            <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedLogs.includes(log.id) ? 'rotate-90 text-blue-600' : 'group-hover:text-blue-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                            <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-blue-600' : 'group-hover:text-blue-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                           </td>
-                          <td className="p-3 whitespace-nowrap text-gray-700 font-medium">
-                            {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                          <td className="p-3 whitespace-nowrap text-blue-800 font-bold">
+                            {group.sessions.length} ครั้ง
+                          </td>
+                          <td className="p-3 font-semibold text-gray-800">
+                            {group.tutor?.name || group.tutor?.username || '-'}
                           </td>
                           <td className="p-3">
-                            {log.learning_type === 'course' ? (
+                            {group.learning_type === 'course' ? (
                               <span className="font-bold text-amber-700 text-xs">
-                                🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'} 
-                                {/* 🔴 บังคับแสดงระดับชั้นให้แม่นยำ */}
-                                <span className="text-gray-500 font-normal ml-1">({log.custom_courses?.grade_level || log.grade || '-'})</span>
+                                🏆 {group.custom_courses?.course_name || 'คอร์สพิเศษ'} 
+                                <span className="text-gray-500 font-normal ml-1">({group.custom_courses?.grade_level || group.grade || '-'})</span>
                               </span>
                             ) : (
                               <div className="flex items-center space-x-1.5 whitespace-nowrap">
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                  {log.learning_type === 'advanced' ? 'Adv' : 'Gen'}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${group.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {group.learning_type === 'advanced' ? 'Adv' : 'Gen'}
                                 </span>
                                 <span className="font-medium text-gray-800">
-                                  {log.subjects?.subject_name || '-'} 
-                                  <span className="text-gray-500 font-normal text-[11px] ml-1">({log.grade || '-'})</span>
+                                  {group.subjects?.subject_name || '-'} 
+                                  <span className="text-gray-500 font-normal text-[11px] ml-1">({group.grade || '-'})</span>
                                 </span>
                               </div>
                             )}
                           </td>
-                          <td className="p-3 font-medium text-gray-700">
-                            {log.tutor?.name || log.tutor?.username}
-                          </td>
-                          <td className="p-3 text-center font-bold text-gray-800">{log.duration_hours}</td>
-                          <td className="p-3 text-right text-gray-400 text-xs">฿{log.ratePerHour}</td>
-                          <td className="p-3 text-right font-bold text-gray-900">฿{log.amount.toLocaleString()}</td>
+                          <td className="p-3 text-center font-bold text-gray-800">{group.total_duration}</td>
+                          <td className="p-3 text-right text-gray-400 text-xs">฿{group.ratePerHour?.toLocaleString()}</td>
+                          <td className="p-3 text-right font-bold text-[#1b4379]">฿{group.total_amount.toLocaleString()}</td>
                         </tr>
-                        
-                        {/* ส่วนขยายแสดงรายละเอียดเพิ่มเติม */}
-                        {expandedLogs.includes(log.id) && (
-                          <tr className="bg-blue-50/40 border-b border-blue-100">
-                            <td colSpan="7" className="p-4 px-12 text-sm shadow-inner">
-                              <div className="flex flex-col space-y-2 text-gray-700">
+
+                        {/* ชั้นที่ 2: แถวรายละเอียดรายวัน */}
+                        {expandedGroups.includes(group.id) && group.sessions.map((session, index) => (
+                          <React.Fragment key={session.id}>
+                            <tr onClick={() => toggleRow(session.id)} className="bg-slate-50/50 hover:bg-slate-100 cursor-pointer border-l-4 border-blue-400 group">
+                              <td className="p-2 border-r border-gray-200"></td>
+                              <td colSpan="3" className="p-3 text-gray-600 font-medium">
                                 <div className="flex items-center">
-                                  <span className="font-bold text-blue-800 w-16">เวลา:</span>
-                                  <span className="text-gray-700 font-medium bg-white px-2 py-0.5 rounded border border-gray-200">
-                                    {formatTime(log.start_time)} น. - {formatTime(log.end_time)} น.
-                                  </span>
+                                  <svg className={`w-3.5 h-3.5 mr-2 transition-transform ${expandedLogs.includes(session.id) ? 'rotate-90 text-blue-600' : 'text-gray-400 group-hover:text-blue-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                  ครั้งที่ {index + 1} : วันที่ {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
-                                <div className="flex items-start">
-                                  <span className="font-bold text-blue-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
-                                  <span className="text-gray-600 italic bg-white px-3 py-2 rounded-lg border border-gray-200 shadow-sm w-full leading-relaxed">
-                                    {log.topic || <span className="text-gray-400">คุณครูไม่ได้ระบุรายละเอียดเนื้อหาในคลาสนี้</span>}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
+                              </td>
+                              <td className="p-3 text-center font-bold text-gray-700">{session.duration_hours}</td>
+                              <td className="p-3 text-right text-gray-400 text-xs">฿{session.ratePerHour}</td>
+                              <td className="p-3 text-right font-bold text-gray-800">฿{session.amount.toLocaleString()}</td>
+                            </tr>
+
+                            {/* ชั้นที่ 3: แถวรายละเอียดเวลาและเนื้อหา */}
+                            {expandedLogs.includes(session.id) && (
+                              <tr className="bg-blue-50/30 border-b border-gray-100 border-l-4 border-blue-400">
+                                <td className="border-r border-gray-200"></td>
+                                <td colSpan="6" className="p-4 px-10 text-sm shadow-inner">
+                                  <div className="flex flex-col space-y-2 text-gray-700">
+                                    <div className="flex items-center">
+                                      <span className="font-bold text-blue-800 w-16">เวลาเรียน:</span>
+                                      <span className="text-gray-700 font-medium bg-white px-2 py-0.5 rounded border border-blue-100">
+                                        {formatTime(session.start_time)} น. - {formatTime(session.end_time)} น.
+                                      </span>
+                                    </div>
+                                    <div className="flex items-start">
+                                      <span className="font-bold text-blue-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
+                                      <span className="text-gray-600 italic bg-white px-3 py-2 rounded-lg border border-blue-100 shadow-sm w-full leading-relaxed">
+                                        {session.topic || <span className="text-gray-400">คุณครูไม่ได้ระบุรายละเอียดเนื้อหาในคลาสนี้</span>}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
                       </React.Fragment>
                     ))}
                   </tbody>
@@ -296,7 +340,6 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* 🔴 เรียกใช้งาน Modal แจ้งหนี้ */}
       <StudentInvoiceModal 
         isOpen={showInvoiceModal} 
         onClose={() => setShowInvoiceModal(false)}

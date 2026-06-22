@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-// 🔴 บล็อกหัวใจสำคัญ: ตั้งค่า CORS เพื่ออนุญาตให้ Frontend (localhost/Vercel) ยิงเข้าหลังบ้านได้
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -9,7 +8,6 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // ดักจับจังหวะที่เบราว์เซอร์ยิงมาตรวจสอบความปลอดภัย (Preflight request)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -27,7 +25,7 @@ serve(async (req) => {
       throw new Error('กรุณาระบุ userId ที่ต้องการลบ')
     }
 
-    // 🔴 สเต็ปที่ 1: ลบข้อมูลในตาราง public.users ก่อน (เพื่อเคลียร์สายสัมพันธ์ Foreign Key)
+    // 🔴 1. ลบข้อมูลในตาราง public.users ก่อนเพื่อเคลียร์หน้าเว็บ
     const { error: dbError } = await supabaseClient
       .from('users')
       .delete()
@@ -35,23 +33,28 @@ serve(async (req) => {
 
     if (dbError) throw new Error(`ลบข้อมูลในตารางไม่สำเร็จ: ${dbError.message}`)
 
-    // 🔴 สเต็ปที่ 2: ค่อยลบบัญชีหลักในระบบ Auth
-    const { data, error: authError } = await supabaseClient.auth.admin.deleteUser(userId)
+    // 🔴 2. พยายามลบบัญชีหลักในระบบ Auth
+    const { error: authError } = await supabaseClient.auth.admin.deleteUser(userId)
 
-    if (authError) throw new Error(`ลบบัญชีล็อกอินไม่สำเร็จ: ${authError.message}`)
+    // 🔴 3. ลอจิกพระเอก: ถ้าลบ Auth ไม่ผ่านเพราะ "หาไม่เจอ" ให้ถือว่าสำเร็จไปเลย!
+    if (authError) {
+      if (authError.message.toLowerCase().includes('not found')) {
+        console.log('ผู้ใช้นี้ไม่มีในระบบ Auth อยู่แล้ว ข้ามการลบ Auth...')
+      } else {
+        // แต่ถ้าพังเพราะสาเหตุอื่น ให้ฟ้อง Error ตามปกติ
+        throw new Error(`ลบบัญชีล็อกอินไม่สำเร็จ: ${authError.message}`)
+      }
+    }
 
     return new Response(
-      JSON.stringify({ message: 'ลบบัญชีผู้ใช้สำเร็จ', data }),
+      JSON.stringify({ message: 'ลบบัญชีผู้ใช้สำเร็จ' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
 
   } catch (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 400 
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     )
   }
 })
