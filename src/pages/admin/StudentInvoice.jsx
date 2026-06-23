@@ -52,6 +52,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
           <img 
             src="/logo.png" 
             alt="PUN-IQ Academy" 
+            crossOrigin="anonymous"
             className="h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
@@ -214,7 +215,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
             </div>
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
                {companyAccount?.qr_code_url ? (
-                  <img src={companyAccount.qr_code_url} alt="QR Code" className="w-full h-full object-contain" />
+                  <img src={companyAccount.qr_code_url} alt="QR Code" crossOrigin="anonymous" className="w-full h-full object-contain" />
                ) : (
                   <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-bold bg-gray-50">NO QR</div>
                )}
@@ -222,8 +223,8 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
           </div>
         </div>
 
-        <p className="text-center text-[9px] sm:text-[10px] text-[#1b4379] font-bold italic mt-2">
-          ขอขอบคุณที่ไว้วางใจ Pun-IQ Academe
+        <p className="text-center text-[10px] text-gray-500 font-bold mt-2">
+          ขอบคุณที่ไว้วางใจ Pun-IQ Academy / ปั้นความรู้ ปั้นอนาคต
         </p>
       </div>
 

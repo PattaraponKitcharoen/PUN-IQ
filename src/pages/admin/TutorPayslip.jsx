@@ -212,7 +212,7 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
         </div>
 
         <p className="text-center text-[10px] text-gray-500 font-bold mt-2">
-          Pun-IQ Academy / ปันความรู้ ปั้นอนาคต
+          ขอบคุณที่ไว้วางใจ Pun-IQ Academy / ปั้นความรู้ ปั้นอนาคต
         </p>
       </div>
 
