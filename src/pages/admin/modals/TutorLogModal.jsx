@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function TutorLogModal({ isOpen, onClose, tutor }) {
@@ -7,9 +7,17 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [actionMessage, setActionMessage] = useState('');
   const [subjectsList, setSubjectsList] = useState([]);
   
-  // 🔴 เพิ่ม State สำหรับดึงรายชื่อคอร์สพิเศษของครูมาเก็บไว้ใช้ตอนแก้ไข
   const [customCoursesList, setCustomCoursesList] = useState([]);
   const [groupMembers, setGroupMembers] = useState([]);
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [allStudents, setAllStudents] = useState([]);
+  const [addStudentId, setAddStudentId] = useState('');
+  
+  // 🔴 1. เพิ่ม State และ Ref สำหรับทำ Auto-Complete Dropdown ของนักเรียน
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   const [editingLog, setEditingLog] = useState(null);
   const [editDate, setEditDate] = useState('');
@@ -21,7 +29,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [editTopic, setEditTopic] = useState('');
   const [editSubjectId, setEditSubjectId] = useState('');
   
-  // 🔴 เพิ่ม State สำหรับคุมการแก้ไขประเภทคลาสและระดับชั้น
   const [editLearningType, setEditLearningType] = useState('general');
   const [editCustomCourseId, setEditCustomCourseId] = useState('');
   const [editGradeLevel, setEditGradeLevel] = useState('');
@@ -35,8 +42,18 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [filterSubject, setFilterSubject] = useState('');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  // 🔴 1. เพิ่ม State สำหรับเก็บเรทราคากลาง
   const [pricingRates, setPricingRates] = useState([]);
+
+  // 🔴 2. ดักจับการคลิกพื้นที่อื่น เพื่อปิด Dropdown อัตโนมัติ
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsStudentDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (editStartTime && editEndTime) {
@@ -51,39 +68,48 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   useEffect(() => {
     if (isOpen && tutor) {
       fetchLogs();
-      setEditingLog(null);
-      setActionMessage('');
-      setFilterMonth('');
-      setFilterStudent('');
-      setFilterSubject('');
-      setSortOrder('desc');
-
-      setEditDate('');
-      setEditStartTime('');
-      setEditEndTime('');
-      setEditHours('');
-      setEditTopic('');
-      setEditSubjectId('');
-      setEditLearningType('general');
-      setEditCustomCourseId('');
-      setEditGradeLevel('');
+      resetFormState();
     }
   }, [isOpen, tutor]);
 
+  const resetFormState = () => {
+    setEditingLog(null);
+    setIsAdding(false);
+    setActionMessage('');
+    setFilterMonth('');
+    setFilterStudent('');
+    setFilterSubject('');
+    setSortOrder('desc');
+
+    setAddStudentId('');
+    setStudentSearchTerm(''); // เคลียร์ช่องค้นหานักเรียน
+    setIsStudentDropdownOpen(false);
+    setEditDate(new Date().toLocaleDateString('en-CA'));
+    setEditStartTime('');
+    setEditEndTime('');
+    setEditHours('');
+    setEditTopic('');
+    setEditSubjectId('');
+    setEditLearningType('general');
+    setEditCustomCourseId('');
+    setEditGradeLevel('');
+  };
+
   const fetchLogs = async () => {
     setLoading(true);
-    // 🔴 2. เพิ่ม pricing_rates และดึงคอลัมน์ราคาของ custom_courses มาด้วย
-    const [subsRes, coursesRes, membersRes, ratesRes] = await Promise.all([
+    const [subsRes, coursesRes, membersRes, ratesRes, studentsRes] = await Promise.all([
       supabase.from('subjects').select('*').order('subject_name'),
       supabase.from('custom_courses').select('id, course_name, grade_level, student_id, group_id, student_hourly_rate, tutor_hourly_rate').eq('tutor_id', tutor.id),
       supabase.from('group_members').select('group_id, student_id'),
-      supabase.from('pricing_rates').select('*')
+      supabase.from('pricing_rates').select('*'),
+      supabase.from('users').select('id, name, username, grade').eq('role', 'student').order('username')
     ]);
     
     if (subsRes.data) setSubjectsList(subsRes.data);
     if (coursesRes.data) setCustomCoursesList(coursesRes.data);
     if (membersRes.data) setGroupMembers(membersRes.data);
     if (ratesRes.data) setPricingRates(ratesRes.data);
+    if (studentsRes.data) setAllStudents(studentsRes.data);
 
     const { data, error } = await supabase
       .from('teaching_logs')
@@ -96,6 +122,15 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setLoading(false);
   };
 
+  // 🔴 3. คำนวณรายชื่อนักเรียนที่ตรงกับคำค้นหา
+  const filteredStudents = useMemo(() => {
+    if (!studentSearchTerm) return allStudents;
+    return allStudents.filter(s => 
+      s.username?.toLowerCase().includes(studentSearchTerm.toLowerCase()) || 
+      s.name?.toLowerCase().includes(studentSearchTerm.toLowerCase())
+    );
+  }, [allStudents, studentSearchTerm]);
+
   const filterOptions = useMemo(() => {
     const studentsMap = new Map();
     const subjectsMap = new Map();
@@ -104,7 +139,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
       if (log.users) {
         studentsMap.set(log.student_id, log.users.name || log.users.username);
       }
-      // ดึงทั้งชื่อวิชาปกติและคอร์สพิเศษมารวมใน Filter
       if (log.learning_type === 'course' && log.custom_courses) {
         subjectsMap.set(log.custom_course_id, log.custom_courses.course_name);
       } else if (log.subjects) {
@@ -159,6 +193,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   };
 
   const handleEditClick = (log) => {
+    setIsAdding(false);
     setEditingLog(log);
     setEditDate(log.teaching_date);
     setEditStartTime(log.start_time ? log.start_time.substring(0, 5) : '');
@@ -166,7 +201,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setEditHours(log.duration_hours);
     setEditTopic(log.topic || '');
     
-    // 🔴 กำหนดค่าเริ่มต้นให้กับฟอร์มประเภทการเรียนใหม่
     setEditLearningType(log.learning_type || 'general');
     setEditSubjectId(log.subject_id || '');
     setEditCustomCourseId(log.custom_course_id || '');
@@ -175,8 +209,11 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setActionMessage('');
   };
 
-  const handleUpdate = async (e) => {
+  const handleCreateLog = async (e) => {
     e.preventDefault();
+    if (!addStudentId) {
+        setActionMessage('❌ กรุณาเลือกนักเรียนจากรายชื่อที่ค้นหา'); return;
+    }
     if (!editDate || !editHours) return;
     if (editLearningType === 'course' && !editCustomCourseId) {
         setActionMessage('❌ กรุณาเลือกคอร์สเรียนพิเศษ'); return;
@@ -189,7 +226,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setActionMessage('');
 
     try {
-      // 🔴 3. คำนวณราคาสแนปช็อตใหม่ ตามประเภทคลาสและระดับชั้นที่แอดมินเพิ่งแก้ไข
       let newStudentRate = 0;
       let newTutorRate = 0;
 
@@ -208,7 +244,68 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
         }
       }
 
-      // 🔴 แนบราคาใหม่ไปอัปเดตด้วย
+      const { error } = await supabase
+        .from('teaching_logs')
+        .insert([{
+          tutor_id: tutor.id,
+          student_id: addStudentId,
+          teaching_date: editDate,
+          start_time: editStartTime || null,
+          end_time: editEndTime || null,
+          duration_hours: parseFloat(editHours),
+          topic: editTopic,
+          learning_type: editLearningType,
+          subject_id: editLearningType === 'course' ? null : editSubjectId,
+          custom_course_id: editLearningType === 'course' ? editCustomCourseId : null,
+          grade_level: editLearningType === 'course' ? null : editGradeLevel,
+          applied_student_rate: newStudentRate,
+          applied_tutor_rate: newTutorRate
+        }]);
+
+      if (error) throw new Error(error.message);
+
+      setActionMessage('✅ เพิ่มประวัติการสอนใหม่และจัดเข้าระบบเงินบิลลิ่งสำเร็จ!');
+      resetFormState();
+      fetchLogs();
+    } catch (error) {
+      setActionMessage(`❌ เพิ่มข้อมูลไม่สำเร็จ: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    if (!editDate || !editHours) return;
+    if (editLearningType === 'course' && !editCustomCourseId) {
+        setActionMessage('❌ กรุณาเลือกคอร์สเรียนพิเศษ'); return;
+    }
+    if (editLearningType !== 'course' && (!editSubjectId || !editGradeLevel)) {
+        setActionMessage('❌ กรุณาเลือกระดับชั้นและรายวิชา'); return;
+    }
+
+    setSaving(true);
+    setActionMessage('');
+
+    try {
+      let newStudentRate = 0;
+      let newTutorRate = 0;
+
+      if (editLearningType === 'course') {
+        const targetCourse = customCoursesList.find(c => c.id === editCustomCourseId);
+        if (targetCourse) {
+          newStudentRate = targetCourse.student_hourly_rate;
+          newTutorRate = targetCourse.tutor_hourly_rate;
+        }
+      } else {
+        const rateTypeLabel = editLearningType === 'advanced' ? 'Advanced' : 'General';
+        const matchedRate = pricingRates.find(r => r.grade_level === editGradeLevel && r.rate_type === rateTypeLabel);
+        if (matchedRate) {
+          newStudentRate = matchedRate.student_hourly_rate;
+          newTutorRate = matchedRate.tutor_hourly_rate;
+        }
+      }
+
       const { error } = await supabase
         .from('teaching_logs')
         .update({
@@ -221,15 +318,15 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
           subject_id: editLearningType === 'course' ? null : editSubjectId,
           custom_course_id: editLearningType === 'course' ? editCustomCourseId : null,
           grade_level: editLearningType === 'course' ? null : editGradeLevel,
-          applied_student_rate: newStudentRate, // บันทึกเรทเด็กใหม่
-          applied_tutor_rate: newTutorRate      // บันทึกเรทครูใหม่
+          applied_student_rate: newStudentRate,
+          applied_tutor_rate: newTutorRate
         })
         .eq('id', editingLog.id);
 
       if (error) throw new Error(error.message);
 
       setActionMessage('✅ แก้ไขและคำนวณราคาบิลลิ่งใหม่สำเร็จ!');
-      setEditingLog(null);
+      resetFormState();
       fetchLogs();
     } catch (error) {
       setActionMessage(`❌ แก้ไขไม่สำเร็จ: ${error.message}`);
@@ -238,13 +335,14 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     }
   };
 
-  // 🔴 ฟิลเตอร์คอร์สพิเศษให้ครอบคลุมทั้งแบบรายบุคคลและแบบกลุ่มที่เด็กคนนี้สังกัดอยู่
+  const activeStudentId = editingLog ? editingLog.student_id : addStudentId;
+
   const studentGroupIds = groupMembers
-    .filter(m => m.student_id === editingLog?.student_id)
+    .filter(m => m.student_id === activeStudentId)
     .map(m => m.group_id);
     
   const studentCustomCourses = customCoursesList.filter(course => 
-    course.student_id === editingLog?.student_id || studentGroupIds.includes(course.group_id)
+    course.student_id === activeStudentId || studentGroupIds.includes(course.group_id)
   );
 
   if (!isOpen || !tutor) return null;
@@ -256,7 +354,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
       <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         
         <div className="bg-indigo-900 text-white p-5 flex justify-between items-center shrink-0">
-          <h3 className="text-lg font-bold">{editingLog ? 'แก้ไขประวัติการสอน' : `ประวัติการสอน: ${tutor.name || tutor.username}`}</h3>
+          <h3 className="text-lg font-bold">
+            {isAdding ? 'เพิ่มประวัติการสอนใหม่' : editingLog ? 'แก้ไขประวัติการสอน' : `ประวัติการสอน: ${tutor.name || tutor.username}`}
+          </h3>
           <button onClick={onClose} className="text-indigo-200 hover:text-white transition">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -265,17 +365,60 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
         <div className="p-6 overflow-y-auto flex-1">
           {actionMessage && <div className={`mb-4 p-3 rounded-lg text-sm font-semibold text-center ${actionMessage.includes('สำเร็จ') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{actionMessage}</div>}
 
-          {loading && !editingLog ? (
+          {loading && !editingLog && !isAdding ? (
             <div className="text-center py-10 text-gray-500 animate-pulse">กำลังโหลดประวัติการสอน...</div>
-          ) : editingLog ? (
+          ) : (editingLog || isAdding) ? (
             
-            <form onSubmit={handleUpdate} className="space-y-4 max-w-lg mx-auto">
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
-                <p className="text-xs text-gray-500 font-bold uppercase">นักเรียนที่สอน</p>
-                <p className="font-semibold text-indigo-700">{editingLog.users?.name || editingLog.users?.username}</p>
-              </div>
+            <form onSubmit={editingLog ? handleUpdate : handleCreateLog} className="space-y-4 max-w-lg mx-auto">
+              
+              {isAdding ? (
+                // 🔴 4. เปลี่ยนเป็นช่องพิมพ์ค้นหา Auto-complete
+                <div className="relative" ref={dropdownRef}>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">ค้นหาและเลือกนักเรียน</label>
+                  <input 
+                    type="text" 
+                    placeholder="พิมพ์ชื่อ หรือ รหัสประจำตัว..." 
+                    value={studentSearchTerm}
+                    onChange={(e) => {
+                      setStudentSearchTerm(e.target.value);
+                      setIsStudentDropdownOpen(true);
+                      setAddStudentId(''); // ถ้าพิมพ์ใหม่ให้เคลียร์ ID ที่เคยเลือกไว้
+                    }}
+                    onFocus={() => setIsStudentDropdownOpen(true)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-gray-800"
+                  />
+                  {/* กล่อง Dropdown ที่จะโผล่มาตอนพิมพ์ */}
+                  {isStudentDropdownOpen && (
+                    <ul className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {filteredStudents.length > 0 ? (
+                        filteredStudents.map(s => (
+                          <li 
+                            key={s.id} 
+                            onClick={() => {
+                              setAddStudentId(s.id);
+                              setStudentSearchTerm(`${s.username} ${s.name ? `(${s.name})` : ''}`);
+                              setIsStudentDropdownOpen(false);
+                            }}
+                            className="px-3 py-2.5 text-sm cursor-pointer hover:bg-indigo-50 font-medium text-gray-700 border-b border-gray-50 last:border-0"
+                          >
+                            {s.username} {s.name ? `(${s.name})` : ''}
+                          </li>
+                        ))
+                      ) : (
+                        <li className="px-3 py-2 text-sm text-gray-500 text-center">ไม่พบรายชื่อนักเรียน</li>
+                      )}
+                    </ul>
+                  )}
+                  {/* ซ่อน input ตัวจริงไว้เพื่อกันลืมกรอก */}
+                  <input type="text" required value={addStudentId} className="h-0 w-0 opacity-0 absolute" onChange={() => {}}/>
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                  <p className="text-xs text-gray-500 font-bold uppercase">นักเรียนที่สอน</p>
+                  <p className="font-semibold text-indigo-700">{editingLog.users?.name || editingLog.users?.username}</p>
+                </div>
+              )}
 
-              {/* 🔴 เพิ่มฟอร์มสลับประเภทการเรียน */}
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">รูปแบบคลาสเรียน</label>
                 <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
@@ -305,10 +448,13 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
               ) : (
                   <div>
                     <label className="block text-xs font-bold text-amber-800 uppercase mb-1">เลือกคอร์สพิเศษของนักเรียน</label>
-                    <select value={editCustomCourseId} onChange={(e) => setEditCustomCourseId(e.target.value)} className="w-full px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none font-semibold text-amber-950" required>
+                    <select value={editCustomCourseId} onChange={(e) => setEditCustomCourseId(e.target.value)} className="w-full px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none font-semibold text-amber-950" required={editLearningType === 'course'}>
                       <option value="">-- เลือกคอร์สพิเศษ --</option>
                       {studentCustomCourses.map(course => <option key={course.id} value={course.id}>{course.course_name} ({course.grade_level})</option>)}
                     </select>
+                    {activeStudentId && studentCustomCourses.length === 0 && (
+                      <p className="text-[10px] text-red-500 mt-1">⚠️ ไม่พบคอร์สเรียนพิเศษผูกอยู่กับนักเรียนคนนี้</p>
+                    )}
                   </div>
               )}
 
@@ -339,9 +485,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
               </div>
 
               <div className="flex space-x-3 pt-4">
-                <button type="button" onClick={() => setEditingLog(null)} className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg transition text-sm">ยกเลิก</button>
+                <button type="button" onClick={resetFormState} className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg transition text-sm">ยกเลิก</button>
                 <button type="submit" disabled={saving} className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition text-sm disabled:opacity-50 shadow-sm">
-                  {saving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+                  {saving ? 'กำลังบันทึก...' : editingLog ? 'บันทึกการแก้ไข' : 'เพิ่มประวัติสอน'}
                 </button>
               </div>
             </form>
@@ -349,6 +495,18 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
           ) : (
             
             <>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">รายการข้อมูลสอนทั้งหมดในระบบ</h4>
+                {/* 🔴 5. นำเครื่องหมาย + ออกจากปุ่ม ตามที่คุณขอครับ */}
+                <button 
+                  type="button" 
+                  onClick={() => setIsAdding(true)}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1.5"
+                >
+                  <span>เพิ่มประวัติการสอน</span>
+                </button>
+              </div>
+
               {logs.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <div>
@@ -412,7 +570,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                         <th className="p-3 font-bold text-gray-700 text-center">เวลา</th>
                         <th className="p-3 font-bold text-gray-700">วิชา</th>
                         <th className="p-3 font-bold text-gray-700">นักเรียน</th>
-                        <th className="p-3 font-bold text-gray-700 text-center">ระดับชั้น</th> {/* 🔴 เพิ่มระดับชั้น */}
+                        <th className="p-3 font-bold text-gray-700 text-center">ระดับชั้น</th>
                         <th className="p-3 font-bold text-gray-700 text-center">ชม.</th>
                         <th className="p-3 font-bold text-gray-700 text-center w-20">จัดการ</th>
                       </tr>
@@ -426,7 +584,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                           <td className="p-3 text-center text-gray-500 text-xs whitespace-nowrap">
                             {log.start_time && log.end_time ? `${formatTime(log.start_time)}-${formatTime(log.end_time)}` : '-'}
                           </td>
-                          {/* 🔴 ตรรกะแสดงผลป้าย Badge ตามประเภทคลาส (General / Advanced / Course) */}
                           <td className="p-3 truncate max-w-[120px]">
                               {log.learning_type === 'course' ? (
                                   <span className="font-bold text-amber-700 text-xs truncate">🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>
@@ -440,8 +597,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                               )}
                           </td>
                           <td className="p-3 text-indigo-700 font-semibold">{log.users?.name || log.users?.username}</td>
-                          {/* 🔴 ดึงระดับชั้นจากตารางคอร์สพิเศษ หากเป็นรูปแบบคอร์สเรียน */}
-                          {/* 🔴 เปลี่ยนโค้ดคอลัมน์ระดับชั้นให้เป็นแบบนี้ครับ */}
                           <td className="p-3 text-center text-gray-600 font-medium text-xs">
                           {log.learning_type === 'course' 
                               ? (log.custom_courses?.grade_level || '-') 
