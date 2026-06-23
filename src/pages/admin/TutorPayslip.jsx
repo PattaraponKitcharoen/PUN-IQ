@@ -16,7 +16,6 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
     const groupedObj = {};
     
     logs.forEach(log => {
-      // 🔴 แก้ไข: เพิ่ม log.grade เข้าไปเป็นหนึ่งในเงื่อนไขการแยกกลุ่ม
       const groupKey = `${log.student_id}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${log.ratePerHour}_${log.grade || 'no-grade'}`;
 
       if (!groupedObj[groupKey]) {
@@ -52,6 +51,8 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
           <img 
             src="/logo.png" 
             alt="PUN-IQ Academy" 
+            crossOrigin="anonymous" // 💡 เพิ่มเติม
+            loading="eager"         // 💡 บังคับโหลดทันที
             className="h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
@@ -134,7 +135,6 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
                             <svg className={`w-2.5 h-2.5 mr-1.5 transition-transform shrink-0 ${expandedLogs.includes(session.id) ? 'rotate-90 text-[#1b4379]' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                             <span className="truncate">
                               ครั้งที่ {index + 1} : {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
-                              {/* 🔴 แก้ไข: ดึงข้อมูลระดับชั้นของแต่ละครั้ง (session.grade) มาแสดงให้แม่นยำ */}
                               {session.grade ? ` (${session.grade})` : group.users?.grade ? ` (${group.users.grade})` : ''}
                             </span>
                           </div>
@@ -203,7 +203,13 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
             </div>
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
                {tutor.qr_code_url ? (
-                  <img src={tutor.qr_code_url} alt="Tutor QR Code" className="w-full h-full object-contain" />
+                  <img 
+                    src={tutor.qr_code_url} 
+                    alt="Tutor QR Code" 
+                    crossOrigin="anonymous" // 💡 เพิ่มเติม
+                    loading="eager"         // 💡 บังคับโหลดทันที
+                    className="w-full h-full object-contain" 
+                  />
                ) : (
                   <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-bold bg-gray-50 text-center leading-tight">ยังไม่เพิ่ม<br/>QR Code</div>
                )}

@@ -16,7 +16,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
     const groupedObj = {};
     
     logs.forEach(log => {
-      // 🔴 1. แก้ไขระบบ Grouping: เพิ่ม log.grade เข้าไปในเงื่อนไขการสร้าง Group Key
       const groupKey = `${log.tutor_id}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${log.ratePerHour}_${log.grade || 'no-grade'}`;
 
       if (!groupedObj[groupKey]) {
@@ -53,6 +52,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
             src="/logo.png" 
             alt="PUN-IQ Academy" 
             crossOrigin="anonymous"
+            loading="eager" // 💡 บังคับโหลดทันที
             className="h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
@@ -99,7 +99,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
             <tbody className="divide-y divide-gray-200">
               {groupedLogs.map((group) => (
                 <React.Fragment key={group.id}>
-                  {/* ชั้นที่ 1: แถวสรุปกลุ่มวิชา */}
                   <tr onClick={() => toggleGroup(group.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors border-b border-gray-100">
                     <td className="py-1.5 px-1 text-center">
                       <svg className={`w-3 h-3 transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-[#1b4379]' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
@@ -126,7 +125,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
                     <td className="py-1.5 px-1 text-center text-[#1b4379] font-bold">฿{group.total_amount.toLocaleString()}</td>
                   </tr>
 
-                  {/* ชั้นที่ 2: แถวรายละเอียดรายวัน */}
                   {expandedGroups.includes(group.id) && group.sessions.map((session, index) => (
                     <React.Fragment key={session.id}>
                       <tr onClick={() => toggleRow(session.id)} className="bg-slate-50/50 hover:bg-slate-100 cursor-pointer border-l-2 border-[#1b4379]">
@@ -134,7 +132,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
                         <td colSpan="3" className="py-1 px-2 text-gray-600 font-medium">
                           <div className="flex items-center">
                             <svg className={`w-2.5 h-2.5 mr-1.5 transition-transform shrink-0 ${expandedLogs.includes(session.id) ? 'rotate-90 text-[#1b4379]' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                            {/* 🔴 2. แสดงผลระดับชั้นจำแนกรายคาบ (session.grade) เพื่อความถูกต้องแม่นยำ */}
                             <span className="truncate">
                               ครั้งที่ {index + 1} : {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                               {session.grade ? ` (${session.grade})` : group.grade ? ` (${group.grade})` : ''}
@@ -146,7 +143,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
                         <td className="py-1 px-1 text-center font-bold text-gray-800">฿{session.amount.toLocaleString()}</td>
                       </tr>
 
-                      {/* ชั้นที่ 3: แถวรายละเอียดเวลาและเนื้อหา */}
                       {expandedLogs.includes(session.id) && (
                         <tr className="bg-white border-b border-gray-100 border-l-2 border-[#1b4379]">
                           <td className="border-r border-gray-200"></td>
@@ -215,7 +211,13 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
             </div>
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
                {companyAccount?.qr_code_url ? (
-                  <img src={companyAccount.qr_code_url} alt="QR Code" crossOrigin="anonymous" className="w-full h-full object-contain" />
+                  <img 
+                    src={companyAccount.qr_code_url} 
+                    alt="QR Code" 
+                    crossOrigin="anonymous" 
+                    loading="eager" // 💡 บังคับโหลดทันที
+                    className="w-full h-full object-contain" 
+                  />
                ) : (
                   <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-bold bg-gray-50">NO QR</div>
                )}
