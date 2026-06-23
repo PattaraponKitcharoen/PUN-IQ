@@ -215,14 +215,13 @@ export default function Billing() {
     setBatchRenderData(preparedData);
   };
 
-  // 🔴 2. อัปเดต Effect ให้ถ่ายรูปแล้วแพ็กลง ZIP แทนการโหลดทีละไฟล์
+  // 🔴 4. Effect ดักรอถ่ายรูปและมัดรวมเป็น ZIP (เวอร์ชันแก้ไขบั๊ครูปขาดบน iOS Safari)
   useEffect(() => {
     if (batchRenderData && batchRenderData.length > 0) {
       const generateImages = async () => {
-        // ให้เวลาเบราว์เซอร์กาง UI สัก 2 วินาที
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // สั่งให้ทั้งหน้าจอเตรียมพร้อมกาง UI ห้องลับออกมาให้เสร็จก่อนในรอบแรก
+        await new Promise(resolve => setTimeout(resolve, 2500));
         
-        // สร้างกล่อง ZIP จำลองขึ้นมา
         const zip = new JSZip();
         const folderName = activeTab === 'tutor' ? `Payslips_${selectedMonth}` : `Invoices_${selectedMonth}`;
         const imgFolder = zip.folder(folderName);
@@ -231,21 +230,26 @@ export default function Billing() {
           const el = document.getElementById(`batch-slip-${userData.user.id}`);
           if (el) {
             try {
-              // ถ่ายรูป
-              const dataUrl = await toJpeg(el, { quality: 1.0, backgroundColor: '#ffffff', pixelRatio: 2 });
+              // 💡 ปรับปรุงจุดที่ 1: หน่วงเวลาก่อนถ่ายแต่ละใบเพิ่มขึ้นเล็กน้อย เพื่อให้ iOS Safari วาดตารางทัน
+              await new Promise(resolve => setTimeout(resolve, 600));
+
+              // 💡 ปรับปรุงจุดที่ 2 (ท่าไม้ตาย iOS): สั่งเรนเดอร์รอบแรกทิ้ง เพื่อบีบให้ Safari โหลดภาพเข้าแคช
+              await toJpeg(el, { quality: 0.1, backgroundColor: '#ffffff' });
               
-              // ตัดข้อความส่วนหัว "data:image/jpeg;base64," ออก
+              // สั่งเรนเดอร์รอบสองเพื่อดึงข้อมูลภาพที่แท้จริงที่สมบูรณ์แบบ
+              const dataUrl = await toJpeg(el, { 
+                quality: 0.95, // 💡 ปรับปรุงจุดที่ 3: ลดเหลือ 95% เพื่อเซฟแรมมือถือ ไม่ให้เครื่องค้าง
+                backgroundColor: '#ffffff', 
+                pixelRatio: 2 
+              });
+              
+              // ตัดข้อความส่วนหัวออกเพื่อเอาข้อมูลภาพเพียวๆ
               const base64Data = dataUrl.split(',')[1];
               
-              // ตั้งชื่อไฟล์
               const prefix = activeTab === 'tutor' ? 'Payslip' : 'Invoice';
               const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.jpg`;
               
-              // ยัดไฟล์รูปลงไปในโฟลเดอร์ ZIP
               imgFolder.file(fileName, base64Data, { base64: true });
-              
-              // หน่วงเวลา 0.2 วินาที เพื่อไม่ให้เบราว์เซอร์ทำงานหนัก
-              await new Promise(resolve => setTimeout(resolve, 200));
             } catch (e) {
               console.error('Error generating image for', userData.user.username, e);
             }
@@ -253,7 +257,7 @@ export default function Billing() {
         }
         
         try {
-          // สั่งแพ็กไฟล์ ZIP แล้วดาวน์โหลดลงเครื่องแค่ไฟล์เดียวจบ
+          // สั่งแพ็กไฟล์ ZIP แล้วดาวน์โหลดลงเครื่อง
           const content = await zip.generateAsync({ type: 'blob' });
           saveAs(content, `${folderName}.zip`);
           alert(`ดาวน์โหลดไฟล์ ${folderName}.zip เรียบร้อยแล้ว!`);
