@@ -22,6 +22,9 @@ export default function TimeLog() {
   // logType: 'individual' | 'group' | 'bulk' (ลงเวลาต่อเนื่อง)
   const [logType, setLogType] = useState('individual'); 
 
+  // State เลือกประเภทการลงเวลาต่อเนื่องย่อย (เดี่ยว / กลุ่ม)
+  const [bulkTargetType, setBulkTargetType] = useState('individual'); 
+
   const [studentId, setStudentId] = useState('');
   const [groupId, setGroupId] = useState('');
   
@@ -36,14 +39,12 @@ export default function TimeLog() {
     return d.toLocaleDateString('en-CA'); 
   };
 
-  // State สำหรับฟอร์มแบบปกติ (Individual / Group)
   const [selectedDate, setSelectedDate] = useState(getLocalTodayDate());
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [durationHours, setDurationHours] = useState('');
   const [topic, setTopic] = useState('');
   
-  // 🔴 1. State สำหรับระบบลงเวลาต่อเนื่อง (Bulk Rows)
   const [bulkRows, setBulkRows] = useState([
     { teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }
   ]);
@@ -54,7 +55,8 @@ export default function TimeLog() {
 
   const isClassroomTutor = tutorUsername === 'Classroom';
 
-  // คำนวณเวลาสำหรับโหมดปกติ
+  const isCurrentGroupMode = logType === 'group' || (logType === 'bulk' && bulkTargetType === 'group');
+
   useEffect(() => {
     if (startTime && endTime) {
       const start = new Date(`2000-01-01T${startTime}`);
@@ -67,13 +69,13 @@ export default function TimeLog() {
     }
   }, [startTime, endTime]);
 
-  // บังคับโหมดคอร์สพิเศษอัตโนมัติหากเป็นสถาบันเข้าใช้งาน
   useEffect(() => {
     if (isClassroomTutor) {
       setLearningType('course');
-      if (logType === 'group') setLogType('individual'); // ป้องกันกรณีหลุดไปแท็บกลุ่ม
+      setLogType('individual');
+      setBulkTargetType('individual');
     }
-  }, [isClassroomTutor, logType]);
+  }, [isClassroomTutor]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -138,16 +140,16 @@ export default function TimeLog() {
   }, []);
 
   useEffect(() => {
-    if (logType === 'group' && groupId) {
+    if (isCurrentGroupMode && groupId) {
       const studentsInGroup = groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id);
       setPresentStudentIds(studentsInGroup);
     } else {
       setPresentStudentIds([]);
     }
-  }, [groupId, logType, groupMembers]);
+  }, [groupId, isCurrentGroupMode, groupMembers]);
 
   const filteredCustomCourses = customCourses.filter(course => {
-    if (logType === 'group') {
+    if (isCurrentGroupMode) {
       return course.group_id === groupId;
     } else {
       const studentGroupIds = groupMembers.filter(m => m.student_id === studentId).map(m => m.group_id);
@@ -165,7 +167,6 @@ export default function TimeLog() {
     setPresentStudentIds(allSelected ? [] : studentsInGroup);
   };
 
-  // 🔴 2. ฟังก์ชันจัดการระบบเพิ่ม/ลดแถว สำหรับโหมดลงเวลาต่อเนื่อง
   const handleAddBulkRow = () => {
     setBulkRows([...bulkRows, { teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }]);
   };
@@ -179,7 +180,6 @@ export default function TimeLog() {
     const updatedRows = [...bulkRows];
     updatedRows[index][field] = value;
 
-    // คำนวณเวลาอัตโนมัติประจำแถวเมื่อมีการแก้ไขเวลาเข้าออก
     if (field === 'start_time' || field === 'end_time') {
       const startTimeVal = updatedRows[index].start_time;
       const endTimeVal = updatedRows[index].end_time;
@@ -195,20 +195,18 @@ export default function TimeLog() {
     setBulkRows(updatedRows);
   };
 
-  // ฟังก์ชันบันทึกข้อมูลหลัก (Hybrid รองรับทั้ง 3 โหมดในปุ่มเดียว)
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (isSubmitting.current) return;
 
-    if (logType !== 'group' && !studentId) { setMessage('❌ กรุณาเลือกนักเรียน'); return; }
-    if (logType === 'group' && !groupId) { setMessage('❌ กรุณาเลือกกลุ่ม'); return; }
-    if (logType === 'group' && presentStudentIds.length === 0) { setMessage('❌ กรุณาเลือกผู้ใช้งานอย่างน้อย 1 คน'); return; }
+    if (!isCurrentGroupMode && !studentId) { setMessage('❌ กรุณาเลือกนักเรียน'); return; }
+    if (isCurrentGroupMode && !groupId) { setMessage('❌ กรุณาเลือกกลุ่ม'); return; }
+    if (isCurrentGroupMode && presentStudentIds.length === 0) { setMessage('❌ กรุณาเลือกผู้ใช้งานอย่างน้อย 1 คน'); return; }
     if (learningType === 'course' && !selectedCourseId) { setMessage('❌ กรุณาเลือกแพ็กเกจ/คอร์ส'); return; }
     if (learningType !== 'course' && !selectedGrade) { setMessage('❌ กรุณาเลือกระดับชั้นของเนื้อหา'); return; }
     if (learningType !== 'course' && !subjectId) { setMessage('❌ กรุณาเลือกรายวิชา'); return; }
 
-    // ตรวจสอบข้อมูลในแถวโหมดต่อเนื่อง
     if (logType === 'bulk') {
       for (let i = 0; i < bulkRows.length; i++) {
         const row = bulkRows[i];
@@ -226,7 +224,6 @@ export default function TimeLog() {
     setMessage('');
 
     try {
-      // ค้นหาเรทราคาตั้งต้น
       let appliedStudentRate = 0;
       let appliedTutorRate = 0;
       let ruleText = "";
@@ -253,35 +250,34 @@ export default function TimeLog() {
       }
 
       let inserts = [];
+      const targets = isCurrentGroupMode ? presentStudentIds : [studentId];
 
-      // 🔴 3. จัดสัดส่วนการประกอบโครงสร้างข้อมูลสำหรับการเซฟเข้าฐานข้อมูล Supabase
       if (logType === 'bulk') {
-        // แตกแถว Array ออกมาเซฟกรณีเป็นโหมดต่อเนื่อง
-        bulkRows.forEach(row => {
-          let finalTopic = row.topic;
-          if (isClassroomTutor && learningType === 'course') {
-            finalTopic = `${ruleText ? ruleText + ' ' : ''}${row.topic ? row.topic + ' ' : ''}(เวลาจริง: ${Number(row.duration_hours).toFixed(2)} ชม.)`;
-          }
+        targets.forEach(sId => {
+          bulkRows.forEach(row => {
+            let finalTopic = row.topic;
+            if (isClassroomTutor && learningType === 'course') {
+              finalTopic = `${ruleText ? ruleText + ' ' : ''}${row.topic ? row.topic + ' ' : ''}(เวลาจริง: ${Number(row.duration_hours).toFixed(2)} ชม.)`;
+            }
 
-          inserts.push({
-            tutor_id: currentTutorId,
-            student_id: studentId,
-            subject_id: learningType === 'course' ? null : subjectId, 
-            teaching_date: row.teaching_date,
-            start_time: row.start_time,
-            end_time: row.end_time,
-            duration_hours: parseFloat(row.duration_hours), 
-            topic: finalTopic,
-            learning_type: learningType,
-            custom_course_id: learningType === 'course' ? selectedCourseId : null,
-            grade_level: learningType === 'course' ? null : selectedGrade,
-            applied_student_rate: appliedStudentRate,
-            applied_tutor_rate: appliedTutorRate 
+            inserts.push({
+              tutor_id: currentTutorId,
+              student_id: sId,
+              subject_id: learningType === 'course' ? null : subjectId, 
+              teaching_date: row.teaching_date,
+              start_time: row.start_time,
+              end_time: row.end_time,
+              duration_hours: parseFloat(row.duration_hours), 
+              topic: finalTopic,
+              learning_type: learningType,
+              custom_course_id: learningType === 'course' ? selectedCourseId : null,
+              grade_level: learningType === 'course' ? null : selectedGrade,
+              applied_student_rate: appliedStudentRate,
+              applied_tutor_rate: appliedTutorRate 
+            });
           });
         });
       } else {
-        // การเซฟแบบแถวเดี่ยวโหมดปกติ (Individual / Group)
-        const targets = logType === 'individual' ? [studentId] : presentStudentIds;
         targets.forEach(sId => {
           let finalTopic = topic;
           if (isClassroomTutor && learningType === 'course') {
@@ -311,7 +307,6 @@ export default function TimeLog() {
 
       setMessage(`✅ บันทึกเวลา${isClassroomTutor ? 'ใช้งานสถานที่' : 'สอน'}สำเร็จเรียบร้อย! (บันทึกทั้งหมด ${inserts.length} รายการ)`);
       
-      // ล้างค่าฟอร์มกลับสู่ค่าเริ่มต้น
       setStudentId('');
       setGroupId('');
       setStartTime('');
@@ -331,8 +326,10 @@ export default function TimeLog() {
     }
   };
 
+  // 🔴 ประกาศตัวแปรนี้กลับเข้ามาเพื่อจัดการแสดงผลนักเรียนในกลุ่ม
   const studentsInThisGroupDetails = myStudents.filter(s => groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id).includes(s.id));
-  const isTargetSelected = logType === 'group' ? groupId : studentId;
+  
+  const isTargetSelected = isCurrentGroupMode ? groupId : studentId;
 
   if (loading) return <div className="p-10 text-center text-gray-500">กำลังโหลดข้อมูล...</div>;
 
@@ -355,7 +352,6 @@ export default function TimeLog() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8 h-fit">
         
-        {/* 🔴 4. แถบเมนูแท็บสลับโหมด ปรับเปลี่ยนจำนวนปุ่มตามสถานะคุณครู / Classroom อัตโนมัติ */}
         <div className="flex bg-gray-100 p-1 rounded-lg mb-6 text-center text-sm font-semibold">
           <button type="button" onClick={() => { setLogType('individual'); setMessage(''); }} className={`flex-1 py-2 rounded-md transition ${logType === 'individual' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>รายบุคคล</button>
           {!isClassroomTutor && (
@@ -365,10 +361,21 @@ export default function TimeLog() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {logType !== 'group' ? (
+          
+          {logType === 'bulk' && !isClassroomTutor && (
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between animate-fadeIn">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">ประเภทเป้าหมายต่อเนื่อง :</span>
+              <div className="flex bg-gray-200 p-0.5 rounded-lg text-xs font-bold">
+                <button type="button" onClick={() => { setBulkTargetType('individual'); setGroupId(''); setSelectedCourseId(''); }} className={`px-4 py-1.5 rounded-md transition-all ${bulkTargetType === 'individual' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'}`}>👤 รายบุคคล (เดี่ยว)</button>
+                <button type="button" onClick={() => { setBulkTargetType('group'); setStudentId(''); setSelectedCourseId(''); }} className={`px-4 py-1.5 rounded-md transition-all ${bulkTargetType === 'group' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'}`}>👥 รายกลุ่ม</button>
+              </div>
+            </div>
+          )}
+
+          {!isCurrentGroupMode ? (
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'เลือกผู้เช่าสถานที่' : 'เลือกนักเรียน'}</label>
-              <select value={studentId} onChange={(e) => { setStudentId(e.target.value); if(!isClassroomTutor) setLearningType('general'); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium" required={logType !== 'group'}>
+              <select value={studentId} onChange={(e) => { setStudentId(e.target.value); if(!isClassroomTutor) setLearningType('general'); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium" required={!isCurrentGroupMode}>
                 <option value="">-- เลือกรายชื่อ --</option>
                 {myStudents.map(s => <option key={s.id} value={s.id}>{s.name || s.username} ({s.grade || '-'})</option>)}
               </select>
@@ -376,15 +383,15 @@ export default function TimeLog() {
           ) : (
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เลือกกลุ่มนักเรียน</label>
-              <select value={groupId} onChange={(e) => { setGroupId(e.target.value); setLearningType('general'); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required={logType === 'group'}>
+              <select value={groupId} onChange={(e) => { setGroupId(e.target.value); setLearningType('general'); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required={isCurrentGroupMode}>
                 <option value="">-- เลือกกลุ่ม --</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.group_name}</option>)}
               </select>
 
               {groupId && (
-                <div className="mt-4 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                <div className="mt-4 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-fadeIn">
                   <div className="flex justify-between items-center mb-3 border-b border-indigo-100 pb-2">
-                    <span className="text-xs font-bold text-indigo-900 uppercase">มาเรียน {presentStudentIds.length} คน</span>
+                    <span className="text-xs font-bold text-indigo-900 uppercase">สมาชิกในกลุ่มที่เข้าเรียน ({presentStudentIds.length} คน)</span>
                     <button type="button" onClick={handleSelectAll} className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline">
                       {presentStudentIds.length === studentsInThisGroupDetails.length ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
                     </button>
@@ -449,9 +456,7 @@ export default function TimeLog() {
             </div>
           )}
 
-          {/* 🔴 5. ส่วนควบคุมสลับอินเทอร์เฟซฟอร์ม (โหมดปกติ VS โหมดบันทึกต่อเนื่องหลายรอบ) */}
           {isTargetSelected && logType !== 'bulk' ? (
-            // แผงอินพุตเดี่ยวโหมดปกติ
             <div className="space-y-4 pt-2 border-t border-dashed">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'วันที่ใช้งาน' : 'วันที่สอน'}</label>
@@ -480,7 +485,6 @@ export default function TimeLog() {
               </div>
             </div>
           ) : isTargetSelected && (
-            // 🔴 แผงอินพุตรูปแบบตารางยืดหยุ่น สำหรับโหมดบันทึกต่อเนื่องหลายรอบ
             <div className="space-y-4 pt-3 border-t border-dashed">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-black text-indigo-900 uppercase tracking-wider">รายการคลาส/รอบเวลาใช้งานย้อนหลัง ({bulkRows.length} รอบ)</span>

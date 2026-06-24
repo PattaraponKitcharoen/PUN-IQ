@@ -16,8 +16,12 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [isAdding, setIsAdding] = useState(false);
   const [allStudents, setAllStudents] = useState([]);
   
-  // 🔴 1. State สำหรับระบบ 3 โหมด (รายบุคคล, รายกลุ่ม, ต่อเนื่อง)
+  // State สำหรับระบบ 3 โหมด (รายบุคคล, รายกลุ่ม, ต่อเนื่อง)
   const [logType, setLogType] = useState('individual'); 
+  
+  // 🔴 1. State เลือกว่าจะลงต่อเนื่องแบบเดี่ยวหรือกลุ่ม
+  const [bulkTargetType, setBulkTargetType] = useState('individual');
+
   const [addStudentId, setAddStudentId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [presentStudentIds, setPresentStudentIds] = useState([]);
@@ -39,7 +43,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [editHours, setEditHours] = useState('');
   const [editTopic, setEditTopic] = useState('');
   
-  // 🔴 2. State สำหรับระบบบันทึกต่อเนื่องแบบแถว (Bulk Rows)
   const [bulkRows, setBulkRows] = useState([
     { teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }
   ]);
@@ -62,6 +65,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   const isClassroomTutor = tutor?.username === 'Classroom';
 
+  // 🔴 2. ตัวแปรตรวจสอบสถานะว่ากำลังทำงานบนฟอร์มรายกลุ่มอยู่หรือไม่ (สำคัญมากสำหรับสลับโหมด Bulk)
+  const isCurrentGroupMode = logType === 'group' || (logType === 'bulk' && bulkTargetType === 'group');
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -72,7 +78,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // คำนวณเวลาอัตโนมัติของโหมดปกติ
   useEffect(() => {
     if (editStartTime && editEndTime) {
       const start = new Date(`2000-01-01T${editStartTime}`);
@@ -88,18 +93,19 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   useEffect(() => {
     if (isAdding && isClassroomTutor) {
       setEditLearningType('course');
-      if (logType === 'group') setLogType('individual');
+      setLogType('individual');
+      setBulkTargetType('individual');
     }
-  }, [isAdding, isClassroomTutor, logType]);
+  }, [isAdding, isClassroomTutor]);
 
   useEffect(() => {
-    if (logType === 'group' && groupId) {
+    if (isCurrentGroupMode && groupId) {
       const studentsInGroup = groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id);
       setPresentStudentIds(studentsInGroup);
     } else {
       setPresentStudentIds([]);
     }
-  }, [groupId, logType, groupMembers]);
+  }, [groupId, isCurrentGroupMode, groupMembers]);
 
   useEffect(() => {
     if (isOpen && tutor) {
@@ -118,6 +124,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setSortOrder('desc');
 
     setLogType('individual');
+    setBulkTargetType('individual');
     setAddStudentId('');
     setGroupId('');
     setPresentStudentIds([]);
@@ -191,7 +198,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setPresentStudentIds(allSelected ? [] : studentsInGroup);
   };
 
-  // 🔴 3. ฟังก์ชันควบคุมการลงเวลาต่อเนื่อง
   const handleAddBulkRow = () => {
     setBulkRows([...bulkRows, { teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }]);
   };
@@ -289,9 +295,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const handleCreateLog = async (e) => {
     e.preventDefault();
 
-    if (logType !== 'group' && !addStudentId) { setActionMessage('❌ กรุณาเลือกนักเรียน'); return; }
-    if (logType === 'group' && !groupId) { setActionMessage('❌ กรุณาเลือกกลุ่ม'); return; }
-    if (logType === 'group' && presentStudentIds.length === 0) { setActionMessage('❌ กรุณาเลือกผู้ใช้งานอย่างน้อย 1 คน'); return; }
+    if (!isCurrentGroupMode && !addStudentId) { setActionMessage('❌ กรุณาเลือกนักเรียน'); return; }
+    if (isCurrentGroupMode && !groupId) { setActionMessage('❌ กรุณาเลือกกลุ่ม'); return; }
+    if (isCurrentGroupMode && presentStudentIds.length === 0) { setActionMessage('❌ กรุณาเลือกผู้ใช้งานอย่างน้อย 1 คน'); return; }
     if (editLearningType === 'course' && !editCustomCourseId) { setActionMessage('❌ กรุณาเลือกแพ็กเกจ/คอร์สเรียนพิเศษ'); return; }
     if (editLearningType !== 'course' && (!editSubjectId || !editGradeLevel)) { setActionMessage('❌ กรุณาเลือกระดับชั้นและรายวิชา'); return; }
 
@@ -336,33 +342,36 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
       }
 
       let inserts = [];
+      // 🔴 3. แยกการเก็บข้อมูลตามเป้าหมาย (รับมือทั้งแบบเดี่ยวและแบบกลุ่มพร้อมกัน)
+      const targets = isCurrentGroupMode ? presentStudentIds : [addStudentId];
 
-      // 🔴 4. โลจิกรองรับการบันทึกฐานข้อมูลพร้อมกัน 3 โหมด
       if (logType === 'bulk') {
-        bulkRows.forEach(row => {
-          let finalTopic = row.topic;
-          if (isClassroomTutor && editLearningType === 'course') {
-            finalTopic = `${ruleText ? ruleText + ' ' : ''}${row.topic ? row.topic + ' ' : ''}(เวลาจริง: ${Number(row.duration_hours).toFixed(2)} ชม.)`;
-          }
+        // คูณรอบกระจายการเซฟข้อมูล
+        targets.forEach(sId => {
+          bulkRows.forEach(row => {
+            let finalTopic = row.topic;
+            if (isClassroomTutor && editLearningType === 'course') {
+              finalTopic = `${ruleText ? ruleText + ' ' : ''}${row.topic ? row.topic + ' ' : ''}(เวลาจริง: ${Number(row.duration_hours).toFixed(2)} ชม.)`;
+            }
 
-          inserts.push({
-            tutor_id: tutor.id,
-            student_id: addStudentId,
-            teaching_date: row.teaching_date,
-            start_time: row.start_time || null,
-            end_time: row.end_time || null,
-            duration_hours: parseFloat(row.duration_hours),
-            topic: finalTopic,
-            learning_type: editLearningType,
-            subject_id: editLearningType === 'course' ? null : editSubjectId,
-            custom_course_id: editLearningType === 'course' ? editCustomCourseId : null,
-            grade_level: editLearningType === 'course' ? null : editGradeLevel,
-            applied_student_rate: newStudentRate,
-            applied_tutor_rate: newTutorRate
+            inserts.push({
+              tutor_id: tutor.id,
+              student_id: sId,
+              teaching_date: row.teaching_date,
+              start_time: row.start_time || null,
+              end_time: row.end_time || null,
+              duration_hours: parseFloat(row.duration_hours),
+              topic: finalTopic,
+              learning_type: editLearningType,
+              subject_id: editLearningType === 'course' ? null : editSubjectId,
+              custom_course_id: editLearningType === 'course' ? editCustomCourseId : null,
+              grade_level: editLearningType === 'course' ? null : editGradeLevel,
+              applied_student_rate: newStudentRate,
+              applied_tutor_rate: newTutorRate
+            });
           });
         });
       } else {
-        const targets = logType === 'individual' ? [addStudentId] : presentStudentIds;
         targets.forEach(sId => {
           let finalTopic = editTopic;
           if (isClassroomTutor && editLearningType === 'course') {
@@ -476,13 +485,13 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const sGroupIds = groupMembers.filter(m => String(m.student_id) === String(activeStudentId)).map(m => m.group_id);
     
   const studentCustomCourses = customCoursesList.filter(course => {
-    if (isAdding && logType === 'group') {
+    if (isAdding && isCurrentGroupMode) {
       return String(course.group_id) === String(groupId);
     }
     return String(course.student_id) === String(activeStudentId) || sGroupIds.includes(course.group_id);
   });
 
-  const isTargetSelected = logType === 'group' ? groupId : addStudentId;
+  const isTargetSelected = isCurrentGroupMode ? groupId : addStudentId;
 
   if (!isOpen || !tutor) return null;
 
@@ -490,7 +499,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-      {/* 🔴 ปรับความสูง: ใช้ h-auto เพื่อให้ยืดตามเนื้อหา และใช้ min-h สำหรับความสูงขั้นต่ำ */}
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl h-auto min-h-[60vh] max-h-[90vh] overflow-hidden flex flex-col">
         
         <div className="bg-indigo-900 text-white p-6 flex justify-between items-center shrink-0">
@@ -504,7 +512,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
           </button>
         </div>
         
-        {/* 🔴 ใส่ p-8 รอบเนื้อหา เพื่อให้มีพื้นที่หายใจในแนวตั้ง */}
         <div className="p-8 overflow-y-auto flex-1">
           {actionMessage && <div className={`mb-6 p-4 rounded-xl text-sm font-semibold text-center ${actionMessage.includes('สำเร็จ') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{actionMessage}</div>}
 
@@ -524,8 +531,19 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                 </div>
               )}
 
+              {/* 🔴 4. เพิ่ม Sub-Toggle ตรงนี้สำหรับการสลับเป้าหมายโหมดต่อเนื่อง */}
+              {isAdding && logType === 'bulk' && !isClassroomTutor && (
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between animate-fadeIn">
+                  <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">ประเภทเป้าหมายต่อเนื่อง :</span>
+                  <div className="flex bg-gray-200 p-0.5 rounded-lg text-xs font-bold">
+                    <button type="button" onClick={() => { setBulkTargetType('individual'); setGroupId(''); setEditCustomCourseId(''); }} className={`px-4 py-1.5 rounded-md transition-all ${bulkTargetType === 'individual' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'}`}>👤 รายบุคคล (เดี่ยว)</button>
+                    <button type="button" onClick={() => { setBulkTargetType('group'); setAddStudentId(''); setEditCustomCourseId(''); }} className={`px-4 py-1.5 rounded-md transition-all ${bulkTargetType === 'group' ? 'bg-white text-indigo-700 shadow-xs' : 'text-gray-500 hover:text-gray-700'}`}>👥 รายกลุ่ม</button>
+                  </div>
+                </div>
+              )}
+
               {isAdding ? (
-                logType !== 'group' ? (
+                !isCurrentGroupMode ? (
                   <div className="relative" ref={dropdownRef}>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'ค้นหาผู้เช่า (นักเรียน)' : 'ค้นหาและเลือกนักเรียน'}</label>
                     <input 
@@ -765,17 +783,16 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                   {logs.length > 0 ? '❌ ไม่พบข้อมูลที่ตรงตามเงื่อนไขการกรอง' : 'ยังไม่มีข้อมูลบันทึก'}
                 </div>
               ) : (
-                // 🔴 ปรับตารางให้ยืดเต็มและจัดการคอลัมน์ใหม่
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-left text-sm border-collapse table-auto">
                     <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs uppercase tracking-wider">
                       <tr>
                         <th className="p-4 font-bold w-24">วันที่</th>
                         <th className="p-4 font-bold text-center w-36">เวลา</th>
-                        <th className="p-4 font-bold">รายการ</th>
-                        <th className="p-4 font-bold">นักเรียน</th>
+                        <th className="p-4 font-bold w-auto">รายการ</th>
+                        <th className="p-4 font-bold w-32">นักเรียน</th>
                         <th className="p-4 font-bold text-center w-28">เวลา / รอบ</th>
-                        <th className="p-4 font-bold text-center w-24">จัดการ</th>
+                        <th className="p-4 font-bold text-center w-20">จัดการ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -794,18 +811,18 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                             <td className="p-4 text-gray-700 font-bold">
                               {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                             </td>
-                            <td className="p-4 text-center text-gray-500 text-xs">
+                            <td className="p-4 text-center text-gray-500 text-xs font-medium">
                               {log.start_time && log.end_time ? `${formatTime(log.start_time)}-${formatTime(log.end_time)}` : '-'}
                             </td>
-                            <td className="p-4 truncate max-w-[200px]">
+                            <td className="p-4 truncate">
                                 {log.learning_type === 'course' ? (
-                                    <span className="font-bold text-amber-700 text-xs truncate">🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>
+                                    <span className="font-bold text-amber-700 text-xs truncate block max-w-full">🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>
                                 ) : (
                                     <div className="flex items-center space-x-1.5">
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                           {log.learning_type === 'advanced' ? 'Adv' : 'Gen'}
                                         </span>
-                                        <span className="text-gray-800 font-medium truncate">{log.subjects?.subject_name || '-'}</span>
+                                        <span className="text-gray-800 font-medium truncate block max-w-full">{log.subjects?.subject_name || '-'}</span>
                                     </div>
                                 )}
                             </td>
