@@ -14,38 +14,39 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
     
     setIsDownloading(true);
     try {
-      // หน่วงเวลาเล็กน้อยให้หน้าจอและฟอนต์ Render เสร็จ
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // 💡 ท่าไม้ตายแก้ปัญหาภาพโดนตัดขอบ (Viewport Clipping) บนมือถือ
-      // บังคับกางความกว้าง-ยาว ตามขนาดข้อมูลจริง ห้ามยึดตามขอบจอ
       const captureOptions = {
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
+        cacheBust: true, // 💡 บังคับเคลียร์แคชรูปภาพป้องกันบั๊กภาพไม่มา
         style: {
-          overflow: 'visible', // ป้องกันการถูกซ่อน
+          overflow: 'visible',
           margin: '0',
         }
       };
 
-      // ถ่ายรูปรอบแรก (ล่อให้ iOS โหลดแคช)
+      // ถ่ายรูปรอบแรก (ล่อให้ระบบโหลดแคชภาพ)
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
       
-      // ถ่ายรูปรอบจริง (ความละเอียด 95% + ขยาย 2 เท่าให้ชัด)
+      // ถ่ายรูปรอบจริง
       const dataUrl = await toJpeg(node, { 
         ...captureOptions, 
         quality: 0.95, 
         pixelRatio: 2 
       });
       
+      // 💡 ปรับปรุงให้รองรับเบราว์เซอร์ที่เข้มงวด (เช่น Safari บน Mac/iPhone)
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `Invoice_${student.username}_${billingMonth}.jpg`; 
+      document.body.appendChild(link); // ยัดลงเว็บชั่วคราว
       link.click();
+      document.body.removeChild(link); // ลบทิ้งเมื่อทำงานเสร็จ
     } catch (error) {
       console.error('Error saving image:', error);
-      alert(`พังที่ขั้นตอนนี้ครับ!\nสาเหตุ: ${error.message || 'เกิดข้อผิดพลาดในการบันทึกภาพ'}`);
+      alert(`ไม่สามารถบันทึกภาพได้เนื่องจากติดสิทธิ์ความปลอดภัยรูปภาพ QR Code ควรรีเฟรชหน้าเว็บแล้วลองอีกครั้งครับ`);
     } finally {
       setIsDownloading(false);
     }

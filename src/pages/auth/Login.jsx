@@ -80,20 +80,13 @@ export default function Login() {
 
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-md backdrop-blur-md z-10 transition-all duration-300">
         
-        {/* บล็อกส่วนโลโก้สถานศึกษา */}
+        {/* 🔴 ส่วนที่ปรับปรุง: นำ logo.svg มาจัดวางพร้อมแต่งกรอบให้ดูพรีเมียมเข้ากับธีมมืด */}
         <div className="flex flex-col items-center mb-8">
-          {/* <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20 mb-4 overflow-hidden">
-            <img 
-              src="/logo.png" 
-              alt="Logo" 
-              className="w-11 h-11 object-contain"
-              onError={(e) => {
-                // ตัวสำรองกรณีที่ยังหาไฟล์รูปภาพไม่เจอในเครื่อง
-                e.target.style.display = 'none';
-                e.target.parentNode.innerHTML = '<span class="text-white text-2xl font-black">IQ</span>';
-              }}
-            />
-          </div> */}
+          <img 
+            src="/logo.svg" 
+            alt="PUN-IQ Logo" 
+            className="w-20 h-20 object-contain rounded-2xl bg-white/10 p-2 shadow-lg mb-4 border border-white/20"
+          />
           <h2 className="text-2xl font-extrabold text-white tracking-tight">PUN-IQ Portal</h2>
           <p className="text-slate-400 text-xs mt-1 font-medium">ระบบบริหารจัดการและบันทึกเวลาเรียน</p>
         </div>

@@ -20,6 +20,7 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
+        cacheBust: true, // 🔴 เพิ่ม: ป้องกันแคชภาพค้าง
         style: {
           overflow: 'visible',
           margin: '0',
@@ -37,7 +38,12 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `Payslip_${tutor.username}_${billingMonth}.jpg`; 
+      
+      // 🔴 เพิ่ม: ท่าไม้ตายรองรับเบราว์เซอร์ Mac / Safari
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+
     } catch (error) {
       console.error('Error saving image:', error);
       alert(`เกิดข้อผิดพลาดในการบันทึกภาพ\nสาเหตุ: ${error.message || 'โครงสร้างสไตล์บางอย่างไม่รองรับ'}`);
