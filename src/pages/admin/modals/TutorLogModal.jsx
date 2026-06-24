@@ -14,7 +14,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [allStudents, setAllStudents] = useState([]);
   const [addStudentId, setAddStudentId] = useState('');
   
-  // 🔴 1. เพิ่ม State และ Ref สำหรับทำ Auto-Complete Dropdown ของนักเรียน
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -44,7 +43,8 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   const [pricingRates, setPricingRates] = useState([]);
 
-  // 🔴 2. ดักจับการคลิกพื้นที่อื่น เพื่อปิด Dropdown อัตโนมัติ
+  const isClassroomTutor = tutor?.username === 'Classroom';
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -55,15 +55,24 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 🔴 ลอจิกสำคัญ: บันทึก "เวลาจริง (ชั่วโมง)" เท่านั้น (เพราะเดี๋ยวระบบบิลจะหารรอบให้เอง)
   useEffect(() => {
     if (editStartTime && editEndTime) {
       const start = new Date(`2000-01-01T${editStartTime}`);
       const end = new Date(`2000-01-01T${editEndTime}`);
       let diff = (end - start) / (1000 * 60 * 60);
       if (diff < 0) diff += 24;
-      if (diff > 0) setEditHours(Number.isInteger(diff) ? diff.toString() : diff.toFixed(2));
+      setEditHours(diff.toFixed(2));
+    } else {
+      if (!editingLog) setEditHours('');
     }
   }, [editStartTime, editEndTime]);
+
+  useEffect(() => {
+    if (isAdding && isClassroomTutor) {
+      setEditLearningType('course');
+    }
+  }, [isAdding, isClassroomTutor]);
 
   useEffect(() => {
     if (isOpen && tutor) {
@@ -82,7 +91,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setSortOrder('desc');
 
     setAddStudentId('');
-    setStudentSearchTerm(''); // เคลียร์ช่องค้นหานักเรียน
+    setStudentSearchTerm(''); 
     setIsStudentDropdownOpen(false);
     setEditDate(new Date().toLocaleDateString('en-CA'));
     setEditStartTime('');
@@ -90,7 +99,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setEditHours('');
     setEditTopic('');
     setEditSubjectId('');
-    setEditLearningType('general');
+    setEditLearningType(tutor?.username === 'Classroom' ? 'course' : 'general');
     setEditCustomCourseId('');
     setEditGradeLevel('');
   };
@@ -122,7 +131,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setLoading(false);
   };
 
-  // 🔴 3. คำนวณรายชื่อนักเรียนที่ตรงกับคำค้นหา
   const filteredStudents = useMemo(() => {
     if (!studentSearchTerm) return allStudents;
     return allStudents.filter(s => 
@@ -136,14 +144,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     const subjectsMap = new Map();
 
     logs.forEach(log => {
-      if (log.users) {
-        studentsMap.set(log.student_id, log.users.name || log.users.username);
-      }
-      if (log.learning_type === 'course' && log.custom_courses) {
-        subjectsMap.set(log.custom_course_id, log.custom_courses.course_name);
-      } else if (log.subjects) {
-        subjectsMap.set(log.subject_id, log.subjects.subject_name);
-      }
+      if (log.users) studentsMap.set(log.student_id, log.users.name || log.users.username);
+      if (log.learning_type === 'course' && log.custom_courses) subjectsMap.set(log.custom_course_id, log.custom_courses.course_name);
+      else if (log.subjects) subjectsMap.set(log.subject_id, log.subjects.subject_name);
     });
 
     return {
@@ -154,28 +157,16 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   const filteredAndSortedLogs = useMemo(() => {
     let result = [...logs];
-
-    if (filterMonth) {
-      result = result.filter(log => log.teaching_date.startsWith(filterMonth));
-    }
-    if (filterStudent) {
-      result = result.filter(log => log.student_id === filterStudent);
-    }
-    if (filterSubject) {
-      result = result.filter(log => log.subject_id === filterSubject || log.custom_course_id === filterSubject);
-    }
+    if (filterMonth) result = result.filter(log => log.teaching_date.startsWith(filterMonth));
+    if (filterStudent) result = result.filter(log => log.student_id === filterStudent);
+    if (filterSubject) result = result.filter(log => log.subject_id === filterSubject || log.custom_course_id === filterSubject);
 
     result.sort((a, b) => {
       const dateA = new Date(a.teaching_date);
       const dateB = new Date(b.teaching_date);
-      if (dateA - dateB !== 0) {
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-      }
-      return sortOrder === 'asc' 
-        ? new Date(a.created_at) - new Date(b.created_at)
-        : new Date(b.created_at) - new Date(a.created_at);
+      if (dateA - dateB !== 0) return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      return sortOrder === 'asc' ? new Date(a.created_at) - new Date(b.created_at) : new Date(b.created_at) - new Date(a.created_at);
     });
-
     return result;
   }, [logs, filterMonth, filterStudent, filterSubject, sortOrder]);
 
@@ -199,8 +190,8 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setEditStartTime(log.start_time ? log.start_time.substring(0, 5) : '');
     setEditEndTime(log.end_time ? log.end_time.substring(0, 5) : '');
     setEditHours(log.duration_hours);
-    setEditTopic(log.topic || '');
     
+    setEditTopic(log.topic || '');
     setEditLearningType(log.learning_type || 'general');
     setEditSubjectId(log.subject_id || '');
     setEditCustomCourseId(log.custom_course_id || '');
@@ -211,16 +202,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   const handleCreateLog = async (e) => {
     e.preventDefault();
-    if (!addStudentId) {
-        setActionMessage('❌ กรุณาเลือกนักเรียนจากรายชื่อที่ค้นหา'); return;
-    }
-    if (!editDate || !editHours) return;
-    if (editLearningType === 'course' && !editCustomCourseId) {
-        setActionMessage('❌ กรุณาเลือกคอร์สเรียนพิเศษ'); return;
-    }
-    if (editLearningType !== 'course' && (!editSubjectId || !editGradeLevel)) {
-        setActionMessage('❌ กรุณาเลือกระดับชั้นและรายวิชา'); return;
-    }
+    if (!addStudentId || !editDate || !editHours) return;
 
     setSaving(true);
     setActionMessage('');
@@ -230,14 +212,13 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
       let newTutorRate = 0;
 
       if (editLearningType === 'course') {
-        const targetCourse = customCoursesList.find(c => c.id === editCustomCourseId);
+        const targetCourse = customCoursesList.find(c => String(c.id) === String(editCustomCourseId));
         if (targetCourse) {
           newStudentRate = targetCourse.student_hourly_rate;
           newTutorRate = targetCourse.tutor_hourly_rate;
         }
       } else {
-        const rateTypeLabel = editLearningType === 'advanced' ? 'Advanced' : 'General';
-        const matchedRate = pricingRates.find(r => r.grade_level === editGradeLevel && r.rate_type === rateTypeLabel);
+        const matchedRate = pricingRates.find(r => r.grade_level === editGradeLevel && r.rate_type === (editLearningType === 'advanced' ? 'Advanced' : 'General'));
         if (matchedRate) {
           newStudentRate = matchedRate.student_hourly_rate;
           newTutorRate = matchedRate.tutor_hourly_rate;
@@ -256,7 +237,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
           topic: editTopic,
           learning_type: editLearningType,
           subject_id: editLearningType === 'course' ? null : editSubjectId,
-          custom_course_id: editLearningType === 'course' ? editCustomCourseId : null,
+          custom_course_id: editLearningType === 'course' ? (editCustomCourseId || null) : null,
           grade_level: editLearningType === 'course' ? null : editGradeLevel,
           applied_student_rate: newStudentRate,
           applied_tutor_rate: newTutorRate
@@ -264,7 +245,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
       if (error) throw new Error(error.message);
 
-      setActionMessage('✅ เพิ่มประวัติการสอนใหม่และจัดเข้าระบบเงินบิลลิ่งสำเร็จ!');
+      setActionMessage('✅ เพิ่มประวัติใหม่ลงระบบบิลลิ่งสำเร็จ!');
       resetFormState();
       fetchLogs();
     } catch (error) {
@@ -277,12 +258,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const handleUpdate = async (e) => {
     e.preventDefault();
     if (!editDate || !editHours) return;
-    if (editLearningType === 'course' && !editCustomCourseId) {
-        setActionMessage('❌ กรุณาเลือกคอร์สเรียนพิเศษ'); return;
-    }
-    if (editLearningType !== 'course' && (!editSubjectId || !editGradeLevel)) {
-        setActionMessage('❌ กรุณาเลือกระดับชั้นและรายวิชา'); return;
-    }
 
     setSaving(true);
     setActionMessage('');
@@ -292,14 +267,13 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
       let newTutorRate = 0;
 
       if (editLearningType === 'course') {
-        const targetCourse = customCoursesList.find(c => c.id === editCustomCourseId);
+        const targetCourse = customCoursesList.find(c => String(c.id) === String(editCustomCourseId));
         if (targetCourse) {
           newStudentRate = targetCourse.student_hourly_rate;
           newTutorRate = targetCourse.tutor_hourly_rate;
         }
       } else {
-        const rateTypeLabel = editLearningType === 'advanced' ? 'Advanced' : 'General';
-        const matchedRate = pricingRates.find(r => r.grade_level === editGradeLevel && r.rate_type === rateTypeLabel);
+        const matchedRate = pricingRates.find(r => r.grade_level === editGradeLevel && r.rate_type === (editLearningType === 'advanced' ? 'Advanced' : 'General'));
         if (matchedRate) {
           newStudentRate = matchedRate.student_hourly_rate;
           newTutorRate = matchedRate.tutor_hourly_rate;
@@ -316,7 +290,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
           topic: editTopic,
           learning_type: editLearningType,
           subject_id: editLearningType === 'course' ? null : editSubjectId,
-          custom_course_id: editLearningType === 'course' ? editCustomCourseId : null,
+          custom_course_id: editLearningType === 'course' ? (editCustomCourseId || null) : null,
           grade_level: editLearningType === 'course' ? null : editGradeLevel,
           applied_student_rate: newStudentRate,
           applied_tutor_rate: newTutorRate
@@ -325,7 +299,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
       if (error) throw new Error(error.message);
 
-      setActionMessage('✅ แก้ไขและคำนวณราคาบิลลิ่งใหม่สำเร็จ!');
+      setActionMessage('✅ แก้ไขและคำนวณบิลลิ่งใหม่สำเร็จ!');
       resetFormState();
       fetchLogs();
     } catch (error) {
@@ -342,7 +316,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     .map(m => m.group_id);
     
   const studentCustomCourses = customCoursesList.filter(course => 
-    course.student_id === activeStudentId || studentGroupIds.includes(course.group_id)
+    String(course.student_id) === String(activeStudentId) || studentGroupIds.includes(course.group_id)
   );
 
   if (!isOpen || !tutor) return null;
@@ -355,7 +329,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
         
         <div className="bg-indigo-900 text-white p-5 flex justify-between items-center shrink-0">
           <h3 className="text-lg font-bold">
-            {isAdding ? 'เพิ่มประวัติการสอนใหม่' : editingLog ? 'แก้ไขประวัติการสอน' : `ประวัติการสอน: ${tutor.name || tutor.username}`}
+            {isAdding ? (isClassroomTutor ? 'บันทึกการเช่าสถานที่ใหม่' : 'เพิ่มประวัติการสอนใหม่') : 
+             editingLog ? 'แก้ไขประวัติ' : 
+             (isClassroomTutor ? 'ประวัติการใช้งานสถานที่' : `ประวัติการสอน: ${tutor.name || tutor.username}`)}
           </h3>
           <button onClick={onClose} className="text-indigo-200 hover:text-white transition">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -366,15 +342,14 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
           {actionMessage && <div className={`mb-4 p-3 rounded-lg text-sm font-semibold text-center ${actionMessage.includes('สำเร็จ') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{actionMessage}</div>}
 
           {loading && !editingLog && !isAdding ? (
-            <div className="text-center py-10 text-gray-500 animate-pulse">กำลังโหลดประวัติการสอน...</div>
+            <div className="text-center py-10 text-gray-500 animate-pulse">กำลังโหลดข้อมูล...</div>
           ) : (editingLog || isAdding) ? (
             
             <form onSubmit={editingLog ? handleUpdate : handleCreateLog} className="space-y-4 max-w-lg mx-auto">
               
               {isAdding ? (
-                // 🔴 4. เปลี่ยนเป็นช่องพิมพ์ค้นหา Auto-complete
                 <div className="relative" ref={dropdownRef}>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">ค้นหาและเลือกนักเรียน</label>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'ค้นหาผู้เช่า (นักเรียน)' : 'ค้นหาและเลือกนักเรียน'}</label>
                   <input 
                     type="text" 
                     placeholder="พิมพ์ชื่อ หรือ รหัสประจำตัว..." 
@@ -382,12 +357,11 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                     onChange={(e) => {
                       setStudentSearchTerm(e.target.value);
                       setIsStudentDropdownOpen(true);
-                      setAddStudentId(''); // ถ้าพิมพ์ใหม่ให้เคลียร์ ID ที่เคยเลือกไว้
+                      setAddStudentId(''); 
                     }}
                     onFocus={() => setIsStudentDropdownOpen(true)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-gray-800"
                   />
-                  {/* กล่อง Dropdown ที่จะโผล่มาตอนพิมพ์ */}
                   {isStudentDropdownOpen && (
                     <ul className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                       {filteredStudents.length > 0 ? (
@@ -405,28 +379,29 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                           </li>
                         ))
                       ) : (
-                        <li className="px-3 py-2 text-sm text-gray-500 text-center">ไม่พบรายชื่อนักเรียน</li>
+                        <li className="px-3 py-2 text-sm text-gray-500 text-center">ไม่พบรายชื่อ</li>
                       )}
                     </ul>
                   )}
-                  {/* ซ่อน input ตัวจริงไว้เพื่อกันลืมกรอก */}
                   <input type="text" required value={addStudentId} className="h-0 w-0 opacity-0 absolute" onChange={() => {}}/>
                 </div>
               ) : (
                 <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
-                  <p className="text-xs text-gray-500 font-bold uppercase">นักเรียนที่สอน</p>
+                  <p className="text-xs text-gray-500 font-bold uppercase">{isClassroomTutor ? 'ผู้เช่า (นักเรียน)' : 'นักเรียนที่สอน'}</p>
                   <p className="font-semibold text-indigo-700">{editingLog.users?.name || editingLog.users?.username}</p>
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">รูปแบบคลาสเรียน</label>
-                <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
-                  <button type="button" onClick={() => { setEditLearningType('general'); setEditCustomCourseId(''); }} className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${editLearningType === 'general' ? 'bg-white text-blue-600 shadow-2xs' : 'text-gray-500'}`}>📚 ทั่วไป</button>
-                  <button type="button" onClick={() => { setEditLearningType('advanced'); setEditCustomCourseId(''); }} className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${editLearningType === 'advanced' ? 'bg-white text-purple-600 shadow-2xs' : 'text-gray-500'}`}>✨ แอดวานซ์</button>
-                  <button type="button" onClick={() => { setEditLearningType('course'); setEditSubjectId(''); setEditGradeLevel(''); }} className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${editLearningType === 'course' ? 'bg-white text-amber-600 shadow-2xs' : 'text-gray-500'}`}>🏆 คอร์สพิเศษ</button>
+              {!isClassroomTutor && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">รูปแบบคลาสเรียน</label>
+                  <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    <button type="button" onClick={() => { setEditLearningType('general'); setEditCustomCourseId(''); }} className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${editLearningType === 'general' ? 'bg-white text-blue-600 shadow-2xs' : 'text-gray-500'}`}>📚 ทั่วไป</button>
+                    <button type="button" onClick={() => { setEditLearningType('advanced'); setEditCustomCourseId(''); }} className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${editLearningType === 'advanced' ? 'bg-white text-purple-600 shadow-2xs' : 'text-gray-500'}`}>✨ แอดวานซ์</button>
+                    <button type="button" onClick={() => { setEditLearningType('course'); setEditSubjectId(''); setEditGradeLevel(''); }} className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${editLearningType === 'course' ? 'bg-white text-amber-600 shadow-2xs' : 'text-gray-500'}`}>🏆 คอร์สพิเศษ</button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {editLearningType !== 'course' ? (
                   <div className="grid grid-cols-2 gap-3">
@@ -447,47 +422,58 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                   </div>
               ) : (
                   <div>
-                    <label className="block text-xs font-bold text-amber-800 uppercase mb-1">เลือกคอร์สพิเศษของนักเรียน</label>
+                    <label className="block text-xs font-bold text-amber-800 uppercase mb-1">{isClassroomTutor ? 'สิทธิ์แพ็กเกจเช่าห้อง' : 'เลือกคอร์สพิเศษของนักเรียน'}</label>
                     <select value={editCustomCourseId} onChange={(e) => setEditCustomCourseId(e.target.value)} className="w-full px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none font-semibold text-amber-950" required={editLearningType === 'course'}>
-                      <option value="">-- เลือกคอร์สพิเศษ --</option>
-                      {studentCustomCourses.map(course => <option key={course.id} value={course.id}>{course.course_name} ({course.grade_level})</option>)}
+                      <option value="">-- {isClassroomTutor ? 'เลือกแพ็กเกจสถานที่' : 'เลือกคอร์สพิเศษ'} --</option>
+                      {studentCustomCourses.map(course => <option key={course.id} value={course.id}>{course.course_name} {course.grade_level ? `(${course.grade_level})` : ''}</option>)}
                     </select>
-                    {activeStudentId && studentCustomCourses.length === 0 && (
-                      <p className="text-[10px] text-red-500 mt-1">⚠️ ไม่พบคอร์สเรียนพิเศษผูกอยู่กับนักเรียนคนนี้</p>
-                    )}
                   </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">วันที่สอน</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'วันที่ใช้งาน' : 'วันที่สอน'}</label>
                 <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เวลาเริ่ม</label>
-                  <input type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <input type="time" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เวลาสิ้นสุด</label>
-                  <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">จำนวนชั่วโมง</label>
-                <input type="number" step="0.25" min="0.5" value={editHours} onChange={(e) => setEditHours(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none" required />
+                <label className="block text-xs font-bold text-indigo-700 uppercase mb-1">
+                  {isClassroomTutor ? 'เวลาใช้งานจริง (ชั่วโมง)' : 'จำนวนชั่วโมง'}
+                </label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0" 
+                    value={editHours} 
+                    onChange={(e) => setEditHours(e.target.value)} 
+                    className={`w-full px-3 py-2 border rounded-lg text-sm font-bold outline-none ${isClassroomTutor ? 'bg-indigo-50/50 border-indigo-200 text-indigo-900 cursor-not-allowed' : 'border-gray-300 bg-gray-50 focus:ring-2 focus:ring-indigo-500'}`} 
+                    required 
+                    readOnly={isClassroomTutor}
+                  />
+                  {isClassroomTutor && <span className="absolute right-3 top-2.5 text-xs font-bold text-indigo-400">คำนวณอัตโนมัติ</span>}
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เนื้อหาที่สอน</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">บันทึกช่วยจำ (ไม่บังคับ)</label>
                 <textarea rows="2" value={editTopic} onChange={(e) => setEditTopic(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
               </div>
 
               <div className="flex space-x-3 pt-4">
                 <button type="button" onClick={resetFormState} className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg transition text-sm">ยกเลิก</button>
-                <button type="submit" disabled={saving} className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition text-sm disabled:opacity-50 shadow-sm">
-                  {saving ? 'กำลังบันทึก...' : editingLog ? 'บันทึกการแก้ไข' : 'เพิ่มประวัติสอน'}
+                <button type="submit" disabled={saving || !editHours} className="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition text-sm disabled:opacity-50 shadow-sm">
+                  {saving ? 'กำลังบันทึก...' : editingLog ? 'บันทึกการแก้ไข' : 'บันทึกลงระบบ'}
                 </button>
               </div>
             </form>
@@ -496,119 +482,72 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
             
             <>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">รายการข้อมูลสอนทั้งหมดในระบบ</h4>
-                {/* 🔴 5. นำเครื่องหมาย + ออกจากปุ่ม ตามที่คุณขอครับ */}
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">รายการข้อมูลบันทึกทั้งหมด</h4>
                 <button 
                   type="button" 
                   onClick={() => setIsAdding(true)}
                   className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1.5"
                 >
-                  <span>เพิ่มประวัติการสอน</span>
+                  <span>{isClassroomTutor ? 'ลงเวลาใช้งานห้องใหม่' : 'เพิ่มประวัติการสอน'}</span>
                 </button>
               </div>
 
-              {logs.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">กรองเดือน/ปีที่สอน</label>
-                    <input 
-                      type="month" 
-                      value={filterMonth} 
-                      onChange={(e) => setFilterMonth(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-indigo-500 bg-white" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">กรองตามรายชื่อนักเรียน</label>
-                    <select 
-                      value={filterStudent} 
-                      onChange={(e) => setFilterStudent(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-indigo-500 bg-white font-medium text-gray-700"
-                    >
-                      <option value="">-- นักเรียนทุกคน --</option>
-                      {filterOptions.students.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">กรองตามรายวิชา</label>
-                    <select 
-                      value={filterSubject} 
-                      onChange={(e) => setFilterSubject(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-indigo-500 bg-white font-medium text-gray-700"
-                    >
-                      <option value="">-- ทุกวิชาเรียน --</option>
-                      {filterOptions.subjects.map(sub => (
-                        <option key={sub.id} value={sub.id}>{sub.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
               {filteredAndSortedLogs.length === 0 ? (
                 <div className="text-center py-10 text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-                  {logs.length > 0 ? '❌ ไม่พบข้อมูลประวัติที่ตรงตามเงื่อนไขการกรอง' : 'ยังไม่มีประวัติการสอน'}
+                  {logs.length > 0 ? '❌ ไม่พบข้อมูลที่ตรงตามเงื่อนไขการกรอง' : 'ยังไม่มีข้อมูลบันทึก'}
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-left text-sm border-collapse">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th 
-                          onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                          className="p-3 font-bold text-gray-700 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition select-none group w-28"
-                        >
-                          <div className="flex items-center space-x-1">
-                            <span>วันที่</span>
-                            <span className="text-gray-400 group-hover:text-indigo-600 text-xs">
-                              {sortOrder === 'asc' ? '↑ เก่าไปใหม่' : '↓ ใหม่ไปเก่า'}
-                            </span>
-                          </div>
-                        </th>
                         <th className="p-3 font-bold text-gray-700 text-center">เวลา</th>
-                        <th className="p-3 font-bold text-gray-700">วิชา</th>
-                        <th className="p-3 font-bold text-gray-700">นักเรียน</th>
-                        <th className="p-3 font-bold text-gray-700 text-center">ระดับชั้น</th>
-                        <th className="p-3 font-bold text-gray-700 text-center">ชม.</th>
+                        <th className="p-3 font-bold text-gray-700">รายการ</th>
+                        <th className="p-3 font-bold text-gray-700">{isClassroomTutor ? 'ผู้ใช้งาน' : 'นักเรียน'}</th>
+                        <th className="p-3 font-bold text-gray-700 text-center">เวลา / รอบ</th>
                         <th className="p-3 font-bold text-gray-700 text-center w-20">จัดการ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredAndSortedLogs.map(log => (
-                        <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-3 text-gray-600 whitespace-nowrap font-medium">
-                            {new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
-                          </td>
-                          <td className="p-3 text-center text-gray-500 text-xs whitespace-nowrap">
-                            {log.start_time && log.end_time ? `${formatTime(log.start_time)}-${formatTime(log.end_time)}` : '-'}
-                          </td>
-                          <td className="p-3 truncate max-w-[120px]">
-                              {log.learning_type === 'course' ? (
-                                  <span className="font-bold text-amber-700 text-xs truncate">🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>
-                              ) : (
-                                  <div className="flex items-center space-x-1.5">
-                                      <span className={`text-[9px] px-1 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                          {log.learning_type === 'advanced' ? 'Adv' : 'Gen'}
-                                      </span>
-                                      <span className="text-gray-800 font-medium truncate">{log.subjects?.subject_name || '-'}</span>
-                                  </div>
-                              )}
-                          </td>
-                          <td className="p-3 text-indigo-700 font-semibold">{log.users?.name || log.users?.username}</td>
-                          <td className="p-3 text-center text-gray-600 font-medium text-xs">
-                          {log.learning_type === 'course' 
-                              ? (log.custom_courses?.grade_level || '-') 
-                              : (log.grade_level || '-')}
-                          </td>
-                          <td className="p-3 text-center font-bold text-gray-800 bg-gray-50/50">{log.duration_hours}</td>
-                          <td className="p-3 flex items-center justify-center space-x-1">
-                            <button onClick={() => handleEditClick(log)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>
-                            <button onClick={() => handleDelete(log.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredAndSortedLogs.map(log => {
+                        // 🔴 โชว์คำนวณรอบในตารางให้เห็นชัดเจน
+                        let roundsDisplay = null;
+                        if (isClassroomTutor && log.custom_courses?.course_name) {
+                           const match = log.custom_courses.course_name.match(/\(([\d.]+) ชม\.\/รอบ/);
+                           if (match) {
+                             const rounds = Number(log.duration_hours) / Number(match[1]);
+                             roundsDisplay = <span className="block text-[10px] text-emerald-600 font-bold mt-0.5">({rounds} รอบ)</span>;
+                           }
+                        }
+
+                        return (
+                          <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-3 text-center text-gray-500 text-xs whitespace-nowrap">
+                              <span className="block font-bold text-gray-700">{new Date(log.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</span>
+                              {log.start_time && log.end_time ? `${formatTime(log.start_time)}-${formatTime(log.end_time)}` : '-'}
+                            </td>
+                            <td className="p-3 truncate max-w-[150px]">
+                                {log.learning_type === 'course' ? (
+                                    <span className="font-bold text-amber-700 text-xs truncate">🏆 {log.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>
+                                ) : (
+                                    <div className="flex items-center space-x-1.5">
+                                        <span className={`text-[9px] px-1 rounded font-bold ${log.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{log.learning_type === 'advanced' ? 'Adv' : 'Gen'}</span>
+                                        <span className="text-gray-800 font-medium truncate">{log.subjects?.subject_name || '-'}</span>
+                                    </div>
+                                )}
+                            </td>
+                            <td className="p-3 text-indigo-700 font-semibold">{log.users?.name || log.users?.username}</td>
+                            <td className="p-3 text-center font-bold text-gray-800 bg-gray-50/50">
+                              {log.duration_hours} ชม.
+                              {roundsDisplay}
+                            </td>
+                            <td className="p-3 flex items-center justify-center space-x-1">
+                              <button onClick={() => handleEditClick(log)} className="p-1.5 text-amber-500 hover:bg-amber-50 rounded"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>
+                              <button onClick={() => handleDelete(log.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

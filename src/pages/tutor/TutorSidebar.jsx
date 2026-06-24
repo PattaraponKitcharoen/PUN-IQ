@@ -13,8 +13,8 @@ export default function TutorSidebar({ isSidebarOpen, setIsSidebarOpen }) {
 
   // 🔴 2. เพิ่มแท็บประวัติ พร้อมปรับไอคอนให้สื่อความหมายชัดเจนขึ้น
   const menuItems = [
-    { id: 'timelog', path: '/tutor/timelog', label: 'ลงเวลาสอน', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /> }, // ไอคอน + (บวก)
-    { id: 'history', path: '/tutor/history', label: 'ประวัติการสอน', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> }, // ไอคอน นาฬิกา
+    { id: 'timelog', path: '/tutor/timelog', label: 'ลงเวลา', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /> }, // ไอคอน + (บวก)
+    { id: 'history', path: '/tutor/history', label: 'ประวัติการลงเวลา', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> }, // ไอคอน นาฬิกา
     { id: 'billing', path: '/tutor/billing', label: 'สรุปรายได้ / บิล', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
   ];
 
@@ -22,13 +22,19 @@ export default function TutorSidebar({ isSidebarOpen, setIsSidebarOpen }) {
     <>
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-indigo-900 text-white p-5 flex flex-col justify-between transform transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:h-screen ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div>
-          <div className="flex items-center space-x-3 px-2 py-4 mb-6 border-b border-indigo-800">
-            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-black text-white border-2 border-indigo-300">T</div>
-            <div>
-              <span className="block text-lg font-bold tracking-wider leading-none">Tutor Portal</span>
-              <span className="block text-xs text-indigo-300 mt-1">PUN-IQ System</span>
+          {/* 🔴 ส่วนที่ปรับปรุง: นำโลโก้ logo.svg มาใส่แทนตัว T และจัด Layout ให้เหมือนหน้า Admin */}
+          <div className="flex items-center space-x-3 px-1 py-4 mb-6 border-b border-indigo-800">
+            <img 
+              src="/logo.svg" 
+              alt="PUN-IQ Logo" 
+              className="w-14 h-14 object-contain rounded-xl bg-white/10 p-1 shadow-sm shrink-0" 
+            />
+            <div className="flex flex-col min-w-0">
+              <span className="text-lg font-bold tracking-wide leading-tight whitespace-nowrap">Tutor Portal</span>
+              <span className="text-xs font-medium text-indigo-300 mt-0.5 whitespace-nowrap">PUN-IQ System</span>
             </div>
           </div>
+          
           <nav className="space-y-1">
             {menuItems.map((item) => {
               // 🔴 3. ลอจิกสำคัญ: ไฮไลต์สีน้ำเงิน ถ้า URL ตรงกับ Path หรือ ถ้าอยู่หน้า edit-log ก็ให้ไฮไลต์แท็บ history ค้างไว้!

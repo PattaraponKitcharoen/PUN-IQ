@@ -5,22 +5,20 @@ export default function ManageCustomCourse() {
   const [courses, setCourses] = useState([]);
   const [students, setStudents] = useState([]);
   const [tutors, setTutors] = useState([]);
-  const [groups, setGroups] = useState([]); // 🔴 เพิ่ม State เก็บรายชื่อกลุ่ม
+  const [groups, setGroups] = useState([]); 
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Form States
   const [courseName, setCourseName] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [studentRate, setStudentRate] = useState('');
   const [tutorRate, setTutorRate] = useState('');
   
-  // 🔴 เพิ่มการควบคุมประเภทคอร์สเดี่ยว/กลุ่ม (Default เป็นเดี่ยว 'individual')
   const [courseTargetType, setCourseTargetType] = useState('individual'); 
   const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [selectedGroupId, setSelectedGroupId] = useState(''); // 🔴 ฟิลด์เลือกกลุ่ม
+  const [selectedGroupId, setSelectedGroupId] = useState(''); 
   const [selectedTutorId, setSelectedTutorId] = useState('');
   
   const [editingCourseId, setEditingCourseId] = useState(null);
@@ -31,7 +29,7 @@ export default function ManageCustomCourse() {
       { data: coursesData },
       { data: studentsData },
       { data: tutorsData },
-      { data: groupsData } // 🔴 ดึงข้อมูลกลุ่มมาร่วมด้วย
+      { data: groupsData } 
     ] = await Promise.all([
       supabase.from('custom_courses').select(`
         *,
@@ -40,11 +38,16 @@ export default function ManageCustomCourse() {
         group:groups(group_name) 
       `).order('created_at', { ascending: false }),
       supabase.from('users').select('id, name, username').eq('role', 'student').order('name'),
-      supabase.from('users').select('id, name, username').eq('role', 'tutor').order('name'),
-      supabase.from('groups').select('id, group_name').order('group_name') // 🔴 ดึงตารางกลุ่ม
+      // 🔴 กรองเอา Classroom ออกจาก Dropdown เลือกครูด้วย
+      supabase.from('users').select('id, name, username').eq('role', 'tutor').neq('username', 'Classroom').order('name'),
+      supabase.from('groups').select('id, group_name').order('group_name') 
     ]);
 
-    if (coursesData) setCourses(coursesData);
+    if (coursesData) {
+      // 🔴 คัดกรองเอาเฉพาะคอร์สเรียนจริงๆ (ไม่เอาแพ็กเกจของ Classroom) มาแสดงผล
+      const filteredCourses = coursesData.filter(c => c.tutor?.username !== 'Classroom');
+      setCourses(filteredCourses);
+    }
     if (studentsData) setStudents(studentsData);
     if (tutorsData) setTutors(tutorsData);
     if (groupsData) setGroups(groupsData);
@@ -63,7 +66,6 @@ export default function ManageCustomCourse() {
     setTutorRate(course.tutor_hourly_rate);
     setSelectedTutorId(course.tutor_id);
     
-    // 🔴 เช็คเคสตอนกดแก้ไขว่าเป็นคอร์สเดี่ยวหรือกลุ่ม
     if (course.group_id) {
       setCourseTargetType('group');
       setSelectedGroupId(course.group_id);
@@ -106,7 +108,6 @@ export default function ManageCustomCourse() {
       student_hourly_rate: Number(studentRate) || 0,
       tutor_hourly_rate: Number(tutorRate) || 0,
       tutor_id: selectedTutorId,
-      // 🔴 จัดสรรฟิลด์ตามประเภทที่แอดมินเลือก
       student_id: courseTargetType === 'individual' ? selectedStudentId : null,
       group_id: courseTargetType === 'group' ? selectedGroupId : null,
     };
@@ -156,7 +157,7 @@ export default function ManageCustomCourse() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto pb-10">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">จัดการคอร์สพิเศษ (Manage Custom Courses)</h1>
         <p className="text-gray-500 mt-1">สร้างแพ็กเกจเรียนและเคาะราคาเจาะจง รองรับทั้งรูปแบบรายบุคคลและรูปแบบกลุ่มนักเรียน</p>
@@ -171,7 +172,6 @@ export default function ManageCustomCourse() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ฟอร์มสร้าง/แก้ไข */}
         <div className={`bg-white rounded-xl shadow-sm border p-6 lg:col-span-1 h-fit transition-all ${editingCourseId ? 'border-amber-400 ring-4 ring-amber-50' : 'border-gray-200'}`}>
           <h2 className={`text-base font-bold mb-4 border-b pb-2 ${editingCourseId ? 'text-amber-600' : 'text-gray-800'}`}>
             {editingCourseId ? '✏️ แก้ไขข้อมูลคอร์สพิเศษ' : 'สร้างคอร์สพิเศษใหม่'}
@@ -188,7 +188,6 @@ export default function ManageCustomCourse() {
               <input type="text" placeholder="เช่น ม.3 (กลุ่มพิเศษ)" value={gradeLevel} onChange={(e) => setGradeLevel(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" required />
             </div>
 
-            {/* 🔴 ส่วนสลับแท็บเลือกประเภทเป้าหมายของคอร์ส (เดี่ยว / กลุ่ม) */}
             <div>
               <label className="block text-xs font-bold text-gray-600 uppercase mb-1">รูปแบบการเรียน</label>
               <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-lg border border-gray-200">
@@ -209,7 +208,6 @@ export default function ManageCustomCourse() {
               </div>
             </div>
 
-            {/* 🔴 เงื่อนไขการแสดง Dropdown ตามรูปแบบการเรียน */}
             {courseTargetType === 'individual' ? (
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">เลือกนักเรียน (ตัวต่อตัว)</label>
@@ -258,7 +256,6 @@ export default function ManageCustomCourse() {
           </form>
         </div>
 
-        {/* ตารางแสดงผลรายชื่อคอร์ส */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 lg:col-span-2 overflow-hidden">
           <h2 className="text-base font-bold text-gray-800 mb-4 border-b pb-2">รายการคอร์สพิเศษปัจจุบัน ({courses.length})</h2>
           
@@ -286,7 +283,6 @@ export default function ManageCustomCourse() {
                         <p className="font-bold text-gray-800 text-sm">{course.course_name}</p>
                         <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-gray-600 font-medium inline-block mt-1">{course.grade_level}</span>
                       </td>
-                      {/* 🔴 บ่งบอกรูปแบบเป้าหมายว่าเป็นชื่อเด็กรายคน หรือชื่อกลุ่ม */}
                       <td className="p-3 font-semibold">
                         {course.group_id ? (
                           <span className="text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded">👥 กลุ่ม: {course.group?.group_name}</span>
@@ -301,7 +297,7 @@ export default function ManageCustomCourse() {
                       <td className="p-3 text-right font-bold text-gray-600">฿{course.tutor_hourly_rate}/ชม.</td>
                       <td className="p-3">
                         <div className="flex items-center justify-center space-x-2">
-                          <input type="checkbox" checked={course.is_active} onChange={() => handleToggleStatus(course.id, course.is_active)} className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded" />
+                          <input type="checkbox" checked={course.is_active} onChange={() => handleToggleStatus(course.id, course.is_active)} className="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded cursor-pointer" />
                           <button onClick={() => handleEditClick(course)} className="text-amber-500 hover:text-amber-700 font-bold">แก้ไข</button>
                           <button onClick={() => handleDeleteCourse(course.id)} className="text-red-500 hover:text-red-700 font-bold">ลบ</button>
                         </div>

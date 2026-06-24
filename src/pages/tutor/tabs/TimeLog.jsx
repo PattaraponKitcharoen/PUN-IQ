@@ -9,8 +9,8 @@ export default function TimeLog() {
   const [pricingRates, setPricingRates] = useState([]);
   const [customCourses, setCustomCourses] = useState([]);
 
-  // 🔴 1. State สำหรับเก็บข้อมูล Profile และสิทธิ์ VIP
   const [tutorProfile, setTutorProfile] = useState(null);
+  const [tutorUsername, setTutorUsername] = useState('');
 
   const [currentTutorId, setCurrentTutorId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +45,8 @@ export default function TimeLog() {
   const [subjectsList, setSubjectsList] = useState([]);
   const [subjectId, setSubjectId] = useState('');
 
+  const isClassroomTutor = tutorUsername === 'Classroom';
+
   useEffect(() => {
     if (startTime && endTime) {
       const start = new Date(`2000-01-01T${startTime}`);
@@ -57,20 +59,28 @@ export default function TimeLog() {
     }
   }, [startTime, endTime]);
 
+  // 🔴 บังคับโหมดคอร์สพิเศษ และบังคับเป็น "รายบุคคล" อัตโนมัติหากเป็นสถาบันเข้าใช้งาน
+  useEffect(() => {
+    if (isClassroomTutor) {
+      setLearningType('course');
+      setLogType('individual');
+    }
+  }, [isClassroomTutor]);
+
   const fetchData = async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     const tutorId = session?.user?.id;
     setCurrentTutorId(tutorId);
 
-    // 🔴 2. ดึงค่า is_vip จากฐานข้อมูลเมื่อครูล็อกอิน
     if (tutorId) {
       const { data: profile } = await supabase
         .from('users')
-        .select('is_vip')
+        .select('username, is_vip')
         .eq('id', tutorId)
         .single();
       setTutorProfile(profile);
+      setTutorUsername(profile?.username || '');
     }
 
     const { data: subsData } = await supabase.from('subjects').select('*').order('subject_name');
@@ -131,7 +141,7 @@ export default function TimeLog() {
   const filteredCustomCourses = customCourses.filter(course => {
     if (logType === 'individual') {
       const studentGroupIds = groupMembers.filter(m => m.student_id === studentId).map(m => m.group_id);
-      return course.student_id === studentId || studentGroupIds.includes(course.group_id);
+      return String(course.student_id) === String(studentId) || studentGroupIds.includes(course.group_id);
     } else {
       return course.group_id === groupId;
     }
@@ -154,8 +164,8 @@ export default function TimeLog() {
 
     if (logType === 'individual' && !studentId) { setMessage('❌ กรุณาเลือกนักเรียน'); return; }
     if (logType === 'group' && !groupId) { setMessage('❌ กรุณาเลือกกลุ่ม'); return; }
-    if (logType === 'group' && presentStudentIds.length === 0) { setMessage('❌ กรุณาเลือกนักเรียนอย่างน้อย 1 คน'); return; }
-    if (learningType === 'course' && !selectedCourseId) { setMessage('❌ กรุณาเลือกคอร์สเรียนพิเศษ'); return; }
+    if (logType === 'group' && presentStudentIds.length === 0) { setMessage('❌ กรุณาเลือกผู้ใช้งานอย่างน้อย 1 คน'); return; }
+    if (learningType === 'course' && !selectedCourseId) { setMessage('❌ กรุณาเลือกแพ็กเกจ/คอร์ส'); return; }
     if (learningType !== 'course' && !selectedGrade) { setMessage('❌ กรุณาเลือกระดับชั้นของเนื้อหา'); return; }
     if (learningType !== 'course' && !subjectId) { setMessage('❌ กรุณาเลือกรายวิชา'); return; }
     if (!selectedDate || !durationHours || !startTime || !endTime) return;
@@ -184,12 +194,15 @@ export default function TimeLog() {
       for (const sId of targets) {
         let appliedStudentRate = 0;
         let appliedTutorRate = 0;
+        let ruleText = "";
 
         if (learningType === 'course') {
-          const targetCourse = customCourses.find(c => c.id === selectedCourseId);
+          const targetCourse = customCourses.find(c => String(c.id) === String(selectedCourseId));
           if (targetCourse) {
             appliedStudentRate = targetCourse.student_hourly_rate;
             appliedTutorRate = targetCourse.tutor_hourly_rate;
+            const ruleMatch = targetCourse.course_name.match(/\(([\d.]+ ชม\.\/รอบ = [\d.]+ บาท)\)/);
+            if (ruleMatch) ruleText = `[เกณฑ์: ${ruleMatch[1]}]`;
           }
         } else {
           const rateTypeLabel = learningType === 'advanced' ? 'Advanced' : 'General';
@@ -200,9 +213,13 @@ export default function TimeLog() {
           }
         }
 
-        // 🔴 3. ถ้าระบบพบว่าครูคนนี้ถูกตั้งเป็น VIP (is_vip = true) ให้เรทค่าสอนเท่ากับค่าเรียนทันที
         if (tutorProfile?.is_vip) {
           appliedTutorRate = appliedStudentRate;
+        }
+
+        let finalTopic = topic;
+        if (isClassroomTutor && learningType === 'course') {
+          finalTopic = `${ruleText ? ruleText + ' ' : ''}${topic ? topic + ' ' : ''}(เวลาจริง: ${durationHours} ชม.)`;
         }
 
         inserts.push({
@@ -212,8 +229,8 @@ export default function TimeLog() {
           teaching_date: selectedDate,
           start_time: startTime,
           end_time: endTime,
-          duration_hours: parseFloat(durationHours),
-          topic: topic,
+          duration_hours: parseFloat(durationHours), 
+          topic: finalTopic,
           learning_type: learningType,
           custom_course_id: learningType === 'course' ? selectedCourseId : null,
           grade_level: learningType === 'course' ? null : selectedGrade,
@@ -225,7 +242,7 @@ export default function TimeLog() {
       const { error } = await supabase.from('teaching_logs').insert(inserts);
       if (error) throw new Error(error.message);
 
-      setMessage(`✅ บันทึกเวลาสอนสำเร็จ! (คำนวณลิงก์เรทราคาระดับชั้น ${selectedGrade || 'คอร์ส'} เรียบร้อย)`);
+      setMessage(`✅ บันทึกเวลา${isClassroomTutor ? 'ใช้งานสถานที่' : 'สอน'}สำเร็จ!`);
       
       setStudentId('');
       setGroupId('');
@@ -236,7 +253,7 @@ export default function TimeLog() {
       setSubjectId('');
       setSelectedCourseId('');
       setSelectedGrade('');
-      setLearningType('general');
+      setLearningType(isClassroomTutor ? 'course' : 'general');
     } catch (err) {
       setMessage(`❌ เกิดข้อผิดพลาด: ${err.message}`);
     } finally {
@@ -253,8 +270,12 @@ export default function TimeLog() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">ระบบลงเวลาสอน</h1>
-        <p className="text-gray-500 mt-1">บันทึกชั่วโมงการสอนสำหรับนักเรียนแต่ละคน หรือคลาสแบบกลุ่ม</p>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {isClassroomTutor ? 'ระบบลงเวลาใช้งานสถานที่' : 'ระบบลงเวลาสอน'}
+        </h1>
+        <p className="text-gray-500 mt-1">
+          {isClassroomTutor ? 'บันทึกเวลาการใช้ห้องสำหรับผู้เช่า (คิดราคาตามรอบแพ็กเกจ)' : 'บันทึกชั่วโมงการสอนสำหรับนักเรียนแต่ละคน หรือคลาสแบบกลุ่ม'}
+        </p>
       </div>
 
       {message && (
@@ -264,17 +285,21 @@ export default function TimeLog() {
       )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8 h-fit">
-        <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
-          <button type="button" onClick={() => { setLogType('individual'); setStudentId(''); setGroupId(''); setMessage(''); }} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${logType === 'individual' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>รายบุคคล</button>
-          <button type="button" onClick={() => { setLogType('group'); setStudentId(''); setGroupId(''); setMessage(''); }} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${logType === 'group' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>รายกลุ่ม</button>
-        </div>
+        
+        {/* 🔴 ซ่อนเมนูเลือก รายบุคคล/รายกลุ่ม หากเป็นหน้าจองห้องเช่าของ Classroom */}
+        {!isClassroomTutor && (
+          <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+            <button type="button" onClick={() => { setLogType('individual'); setStudentId(''); setGroupId(''); setMessage(''); }} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${logType === 'individual' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>รายบุคคล</button>
+            <button type="button" onClick={() => { setLogType('group'); setStudentId(''); setGroupId(''); setMessage(''); }} className={`flex-1 py-2 text-sm font-semibold rounded-md transition ${logType === 'group' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>รายกลุ่ม</button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {logType === 'individual' ? (
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เลือกนักเรียน</label>
-              <select value={studentId} onChange={(e) => { setStudentId(e.target.value); setLearningType('general'); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required={logType === 'individual'}>
-                <option value="">-- เลือกนักเรียน --</option>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'เลือกผู้เช่าสถานที่ (รายบุคคล)' : 'เลือกนักเรียน'}</label>
+              <select value={studentId} onChange={(e) => { setStudentId(e.target.value); setLearningType(isClassroomTutor ? 'course' : 'general'); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required={logType === 'individual'}>
+                <option value="">-- {isClassroomTutor ? 'เลือกรายชื่อ' : 'เลือกนักเรียน'} --</option>
                 {myStudents.map(s => <option key={s.id} value={s.id}>{s.name || s.username} ({s.grade || '-'})</option>)}
               </select>
             </div>
@@ -307,7 +332,7 @@ export default function TimeLog() {
             </div>
           )}
           
-          {isTargetSelected && (
+          {!isClassroomTutor && isTargetSelected && (
             <div className="pt-3 border-t border-gray-100 animate-fadeIn">
               <label className="block text-xs font-bold text-gray-600 uppercase mb-2">รูปแบบคลาสเรียนในวันนี้</label>
               <div className="grid grid-cols-3 gap-2 bg-gray-100 p-1.5 rounded-lg border border-gray-200">
@@ -342,21 +367,23 @@ export default function TimeLog() {
 
           {isTargetSelected && learningType === 'course' && (
             <div className="animate-fadeIn">
-              <label className="block text-xs font-bold text-amber-800 uppercase mb-1">เลือกคอร์สพิเศษของนักเรียน</label>
-              <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} className="w-full px-4 py-2.5 border border-amber-300 bg-amber-50/50 text-amber-950 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none font-semibold" required>
-                <option value="">-- เลือกคอร์สพิเศษที่มีสิทธิ์เรียน --</option>
+              <label className={`block text-xs font-bold uppercase mb-1 ${isClassroomTutor ? 'text-emerald-800' : 'text-amber-800'}`}>
+                {isClassroomTutor ? 'เลือกแพ็กเกจสิทธิ์เช่าสถานที่' : 'เลือกคอร์สพิเศษของนักเรียน'}
+              </label>
+              <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 outline-none font-semibold ${isClassroomTutor ? 'bg-emerald-50/50 border-emerald-300 text-emerald-950 focus:ring-emerald-500' : 'border-amber-300 bg-amber-50/50 text-amber-950 focus:ring-amber-500'}`} required>
+                <option value="">-- {isClassroomTutor ? 'เลือกแพ็กเกจที่มีสิทธิ์เข้าใช้งาน' : 'เลือกคอร์สพิเศษที่มีสิทธิ์เรียน'} --</option>
                 {filteredCustomCourses.map(course => (
-                  <option key={course.id} value={course.id}>{course.course_name} ({course.grade_level})</option>
+                  <option key={course.id} value={course.id}>{course.course_name} {course.grade_level !== 'สถานที่' ? `(${course.grade_level})` : ''}</option>
                 ))}
               </select>
               {filteredCustomCourses.length === 0 && (
-                <p className="text-[10px] text-red-500 mt-1">⚠️ ไม่พบวิชาในระบบคอร์สพิเศษของนักเรียนคนนี้</p>
+                <p className="text-[10px] text-red-500 mt-1">⚠️ ไม่พบ{isClassroomTutor ? 'สิทธิ์แพ็กเกจสถานที่' : 'วิชาในระบบคอร์สพิเศษ'}ของรายชื่อนี้</p>
               )}
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">วันที่สอน</label>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'วันที่ใช้งาน' : 'วันที่สอน'}</label>
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required />
           </div>
 
@@ -373,19 +400,19 @@ export default function TimeLog() {
 
           <div>
             <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex justify-between">
-              <span>จำนวนชั่วโมง</span>
+              <span>{isClassroomTutor ? 'เวลาใช้งานจริง (ชั่วโมง)' : 'จำนวนชั่วโมง'}</span>
               <span className="text-[10px] text-gray-400 font-normal">*คำนวณอัตโนมัติ</span>
             </label>
-            <input type="number" step="0.25" min="0.5" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none" required />
+            <input type="number" step="0.25" min="0.5" value={durationHours} onChange={(e) => setDurationHours(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none" required readOnly={isClassroomTutor} />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">รายละเอียด / เนื้อหาที่สอน</label>
-            <textarea rows="3" placeholder="บทเรียนที่สอนวันนี้ หรือความคืบหน้า..." value={topic} onChange={(e) => setTopic(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
+            <label className="block text-xs font-bold text-gray-700 uppercase mb-1">รายละเอียด / {isClassroomTutor ? 'บันทึกช่วยจำ' : 'เนื้อหาที่สอน'}</label>
+            <textarea rows="3" placeholder={isClassroomTutor ? "โน้ตเพิ่มเติม..." : "บทเรียนที่สอนวันนี้ หรือความคืบหน้า..."} value={topic} onChange={(e) => setTopic(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
           </div>
 
-          <button type="submit" disabled={saving || !isTargetSelected} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition shadow-sm disabled:opacity-50 mt-2">
-            {saving ? 'กำลังบันทึก...' : 'บันทึกเวลาสอน'}
+          <button type="submit" disabled={saving || !isTargetSelected} className={`w-full text-white font-bold py-3 rounded-lg transition shadow-sm disabled:opacity-50 mt-2 ${isClassroomTutor ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+            {saving ? 'กำลังบันทึก...' : isClassroomTutor ? 'บันทึกเวลาการเช่า' : 'บันทึกเวลาสอน'}
           </button>
         </form>
       </div>

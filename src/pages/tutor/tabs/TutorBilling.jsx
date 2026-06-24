@@ -12,9 +12,11 @@ export default function TutorEarnings() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // 🔴 1. เพิ่ม State สำหรับจัดการ Dropdown 3 ชั้น
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
+
+  // 🔴 1. ตรวจจับสถานะว่าเป็นไอดีสถาบันสำหรับห้องเช่าหรือไม่
+  const isClassroomTutor = sessionUser?.username === 'Classroom';
 
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(i => i !== groupId) : [...prev, groupId]);
@@ -77,11 +79,27 @@ export default function TutorEarnings() {
         ? log.custom_courses?.grade_level
         : log.grade_level;
       
-      const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+      // 🔴 2. ปรับตรรกะคณิตศาสตร์สำหรับคำนวณยอดเงินเช่าห้องให้ลงตัวถูกต้องตามเกณฑ์รอบบิล
+      let amount = 0;
+      let roundsForDisplay = null;
+
+      if (isClassroomTutor) {
+        let rounds = 1;
+        const courseName = log.custom_courses?.course_name || '';
+        const match = courseName.match(/([\d.]+)\s*ชม\.\/รอบ/);
+        if (match) {
+          rounds = Number(log.duration_hours) / Number(match[1]); // เวลาจริง หาร เกณฑ์รอบ
+          roundsForDisplay = rounds;
+        }
+        amount = Math.round(rounds * ratePerHour * 100) / 100;
+      } else {
+        amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+      }
+
       totalHrs += Number(log.duration_hours);
       totalEarnings = Math.round((totalEarnings + amount) * 100) / 100;
 
-      return { ...log, grade, ratePerHour, amount };
+      return { ...log, grade, ratePerHour, amount, roundsForDisplay };
     });
 
     return { totalHrs, totalEarnings, logsWithCalculation };
@@ -90,7 +108,6 @@ export default function TutorEarnings() {
   const { totalHrs, totalEarnings, logsWithCalculation } = calculateEarnings();
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
-  // 🔴 2. เพิ่มตรรกะการ Grouping แบบเดียวกับหน้า Payslip
   const groupedLogs = useMemo(() => {
     const groupedObj = {};
     
@@ -102,8 +119,8 @@ export default function TutorEarnings() {
           id: groupKey,
           users: log.users,
           learning_type: log.learning_type,
-          subjects: log.subjects,
           custom_courses: log.custom_courses,
+          subjects: log.subjects,
           grade: log.grade,
           ratePerHour: log.ratePerHour,
           total_duration: 0,
@@ -121,11 +138,16 @@ export default function TutorEarnings() {
   }, [logsWithCalculation]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 pb-10">
       
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-800 rounded-2xl p-8 text-white shadow-lg">
-        <h1 className="text-3xl font-bold mb-2">สรุปรายได้การสอน, {sessionUser?.name || sessionUser?.username || ''} 💼</h1>
-        <p className="text-emerald-100 opacity-90">ระบบสรุปชั่วโมงสอนและคำนวณค่าตอบแทนประจำเดือนของคุณครู</p>
+      {/* 🔴 3. ปรับเปลี่ยนข้อความต้อนรับและคำอธิบาย Header ด้านบนตามสถานะผู้ใช้ */}
+      <div className={`bg-gradient-to-r rounded-2xl p-8 text-white shadow-lg ${isClassroomTutor ? 'from-emerald-600 to-teal-800' : 'from-indigo-600 to-slate-800'}`}>
+        <h1 className="text-3xl font-bold mb-2">
+          {isClassroomTutor ? `สรุปรายได้สุทธิค่าเช่าสถานที่` : `สรุปรายได้การสอน, ${sessionUser?.name || sessionUser?.username || ''} 💼`}
+        </h1>
+        <p className="text-emerald-100 opacity-90">
+          {isClassroomTutor ? 'ระบบสรุปเวลาใช้งานพื้นที่และคำนวณยอดจัดเก็บค่าเช่าสถาบันรายเดือน' : 'ระบบสรุปชั่วโมงสอนและคำนวณค่าตอบแทนประจำเดือนของคุณครู'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -145,14 +167,20 @@ export default function TutorEarnings() {
           </div>
 
           <div className="bg-emerald-50 rounded-xl shadow-sm border border-emerald-200 p-5">
-            <h2 className="text-sm font-bold uppercase mb-4 text-emerald-800">สรุปรายได้เดือนนี้</h2>
+            <h2 className="text-sm font-bold uppercase mb-4 text-emerald-800">
+              {isClassroomTutor ? 'สรุปงบค่าเช่าเดือนนี้' : 'สรุปรายได้เดือนนี้'}
+            </h2>
             <div className="space-y-4">
               <div className="flex justify-between items-center bg-white/60 p-3 rounded-lg border border-emerald-100">
-                <span className="text-sm text-emerald-900 font-medium">รวมเวลาสอนทั้งหมด:</span>
+                <span className="text-sm text-emerald-900 font-medium">
+                  {isClassroomTutor ? 'เวลาใช้ห้องรวมทั้งสิ้น:' : 'รวมเวลาสอนทั้งหมด:'}
+                </span>
                 <span className="font-bold text-lg text-emerald-700">{totalHrs} ชม.</span>
               </div>
               <div className="pt-2 border-t border-emerald-200/50">
-                <span className="block text-xs font-bold text-emerald-700/70 mb-1 uppercase tracking-wider">ค่าตอบแทนรวมโดยประมาณ:</span>
+                <span className="block text-xs font-bold text-emerald-700/70 mb-1 uppercase tracking-wider">
+                  {isClassroomTutor ? 'ยอดเงินสุทธิเข้าบริษัท:' : 'ค่าตอบแทนรวมโดยประมาณ:'}
+                </span>
                 <span className="block text-4xl font-black text-emerald-600 tracking-tight">
                   ฿{totalEarnings.toLocaleString()}
                 </span>
@@ -166,34 +194,35 @@ export default function TutorEarnings() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
               <h2 className="text-xl font-bold text-gray-800">
-                รายละเอียดการสอน ประจำเดือน {new Date(selectedMonth + '-01').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
+                {isClassroomTutor ? 'รายละเอียดการใช้งานสถานที่' : 'รายละเอียดการสอน'} ประจำเดือน {new Date(selectedMonth + '-01').toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}
               </h2>
             </div>
 
             {loading ? (
-              <div className="text-center py-20 text-gray-400 animate-pulse flex flex-col items-center">
+              <div className="text-center py-20 text-gray-400 animate-pulse Trio flex flex-col items-center">
                  <svg className="w-10 h-10 text-emerald-300 mb-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                 <p>กำลังดึงข้อมูลรายได้ของคุณ...</p>
+                 <p>กำลังประมวลผลข้อมูลยอดเงิน...</p>
               </div>
             ) : groupedLogs.length === 0 ? (
               <div className="text-center py-16 text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center">
                  <span className="text-4xl mb-3">📅</span>
-                 <p className="font-medium text-gray-600">ไม่มีประวัติการสอนในเดือนนี้</p>
-                 <p className="text-xs text-gray-400 mt-1">หากคุณเพิ่งสอนเสร็จ อย่าลืมไปลงเวลาสอนนะครับ</p>
+                 <p className="font-medium text-gray-600">
+                   {isClassroomTutor ? 'ยังไม่มีประวัติการเช่าสถานที่ในเดือนนี้' : 'ไม่มีประวัติการสอนในเดือนนี้'}
+                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-gray-200">
-                {/* 🔴 3. โครงสร้างตารางใหม่ รองรับ 3-tier dropdown */}
                 <table className="w-full text-left text-sm border-collapse">
                   <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 uppercase tracking-wider text-[11px]">
                     <tr>
                       <th className="p-3 w-10 text-center"></th> 
                       <th className="p-3 font-bold whitespace-nowrap">จำนวนครั้ง</th>
-                      <th className="p-3 font-bold">สอนนักเรียน</th>
-                      <th className="p-3 font-bold">วิชา / คอร์ส</th>
-                      <th className="p-3 font-bold text-center">รวม ชม.</th>
-                      <th className="p-3 font-bold text-right">เรท/ชม.</th>
-                      <th className="p-3 font-bold text-right">รวมรายได้</th>
+                      {/* 🔴 4. สลับคำศัพท์ตรงหัวคอลัมน์ตารางให้ตรงความเหมาะสม */}
+                      <th className="p-3 font-bold">{isClassroomTutor ? 'ผู้เช่าสถานที่ / นักเรียน' : 'สอนนักเรียน'}</th>
+                      <th className="p-3 font-bold">{isClassroomTutor ? 'รายละเอียดห้องที่กำหนด' : 'วิชา / คอร์ส'}</th>
+                      <th className="p-3 font-bold text-center">{isClassroomTutor ? 'เวลาใช้งาน' : 'รวม ชม.'}</th>
+                      <th className="p-3 font-bold text-right">{isClassroomTutor ? 'เรท (รอบละ)' : 'เรท/ชม.'}</th>
+                      <th className="p-3 font-bold text-right">{isClassroomTutor ? 'เงินสุทธิ' : 'รวมรายได้'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -214,7 +243,9 @@ export default function TutorEarnings() {
                             {group.learning_type === 'course' ? (
                               <span className="font-bold text-amber-700 text-xs">
                                 🏆 {group.custom_courses?.course_name || 'คอร์สพิเศษ'} 
-                                <span className="text-gray-500 font-normal ml-1">({group.custom_courses?.grade_level || group.grade || '-'})</span>
+                                {group.custom_courses?.grade_level !== 'สถานที่' && (
+                                  <span className="text-gray-500 font-normal ml-1">({group.custom_courses?.grade_level || group.grade || '-'})</span>
+                                )}
                               </span>
                             ) : (
                               <div className="flex items-center space-x-1.5 whitespace-nowrap">
@@ -228,7 +259,7 @@ export default function TutorEarnings() {
                               </div>
                             )}
                           </td>
-                          <td className="p-3 text-center font-bold text-gray-800">{group.total_duration}</td>
+                          <td className="p-3 text-center font-bold text-gray-800">{group.total_duration} ชม.</td>
                           <td className="p-3 text-right text-gray-400 text-xs">฿{group.ratePerHour?.toLocaleString()}</td>
                           <td className="p-3 text-right font-bold text-emerald-700">฿{group.total_amount.toLocaleString()}</td>
                         </tr>
@@ -244,7 +275,11 @@ export default function TutorEarnings() {
                                   ครั้งที่ {index + 1} : วันที่ {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
                               </td>
-                              <td className="p-3 text-center font-bold text-gray-700">{session.duration_hours}</td>
+                              {/* 🔴 5. ปรับให้แถวรายวัน แสดงจำนวนรอบควบคู่ไปด้วยกันอย่างละเอียดโปร่งใส */}
+                              <td className="p-3 text-center font-bold text-gray-700">
+                                {session.duration_hours} ชม.
+                                {session.roundsForDisplay && <span className="block text-[10px] text-emerald-600 font-bold">({session.roundsForDisplay} รอบ)</span>}
+                              </td>
                               <td className="p-3 text-right text-gray-400 text-xs">฿{session.ratePerHour}</td>
                               <td className="p-3 text-right font-bold text-gray-800">฿{session.amount.toLocaleString()}</td>
                             </tr>
@@ -262,9 +297,9 @@ export default function TutorEarnings() {
                                       </span>
                                     </div>
                                     <div className="flex items-start">
-                                      <span className="font-bold text-emerald-800 w-16 shrink-0 mt-0.5">เนื้อหา:</span>
+                                      <span className="font-bold text-emerald-800 w-16 shrink-0 mt-0.5">หมายเหตุ:</span>
                                       <span className="text-gray-600 italic bg-white px-3 py-2 rounded-lg border border-emerald-100 shadow-sm w-full leading-relaxed">
-                                        {session.topic || <span className="text-gray-400">ไม่ได้ระบุรายละเอียดเนื้อหาในคลาสนี้</span>}
+                                        {session.topic || <span className="text-gray-400">ไม่มีบันทึกช่วยจำเพิ่มเติม</span>}
                                       </span>
                                     </div>
                                   </div>

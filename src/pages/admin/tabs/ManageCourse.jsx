@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageCourse() {
@@ -8,14 +8,18 @@ export default function ManageCourse() {
   
   const [selectedTutorId, setSelectedTutorId] = useState('');
   
-  // 🔴 1. State สำหรับระบบค้นหาครู (Auto-complete)
+  // State สำหรับระบบค้นหาครู (Auto-complete)
   const [tutorSearchTerm, setTutorSearchTerm] = useState('');
   const [isTutorDropdownOpen, setIsTutorDropdownOpen] = useState(false);
   const tutorDropdownRef = useRef(null);
 
-  // 🔴 2. State สำหรับช่องค้นหากลุ่มและนักเรียน
+  // State สำหรับช่องค้นหากลุ่มและนักเรียน
   const [groupSearchTerm, setGroupSearchTerm] = useState('');
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  
+  // 🔴 1. เพิ่ม State สำหรับคุมสถานะแท็บตัวกรอง (all / assigned / unassigned)
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [studentFilter, setStudentFilter] = useState('all');
   
   const [initialStudentIds, setInitialStudentIds] = useState([]);
   const [initialGroupIds, setInitialGroupIds] = useState([]);
@@ -28,7 +32,7 @@ export default function ManageCourse() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  // 🔴 ดักจับการคลิกพื้นที่อื่นเพื่อปิด Dropdown เลือกครู
+  // ดักจับการคลิกพื้นที่อื่นเพื่อปิด Dropdown เลือกครู
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (tutorDropdownRef.current && !tutorDropdownRef.current.contains(event.target)) {
@@ -67,6 +71,8 @@ export default function ManageCourse() {
       setAssignedGroupIds([]);
       setInitialStudentIds([]);
       setInitialGroupIds([]);
+      setGroupFilter('all');     // ล้างค่าตัวกรองกลับสู่ค่าเริ่มต้นเมื่อเปลี่ยนครู
+      setStudentFilter('all');
       return;
     }
 
@@ -95,7 +101,6 @@ export default function ManageCourse() {
     setMessage('');
   }, [selectedTutorId]);
 
-  // 🔴 3. ฟังก์ชันกรองข้อมูลตามคำค้นหา (คำนวณแบบ Real-time)
   const filteredTutors = useMemo(() => {
     if (!tutorSearchTerm) return tutors;
     return tutors.filter(t => 
@@ -104,20 +109,46 @@ export default function ManageCourse() {
     );
   }, [tutors, tutorSearchTerm]);
 
+  // 🔴 2. ขยายลอจิกการคำนวณ Filter กลุ่มเรียนแบบไฮบริด (คำค้นหา + แท็บสถานะ)
   const filteredGroups = useMemo(() => {
-    if (!groupSearchTerm) return groups;
-    return groups.filter(g => 
-      g.group_name.toLowerCase().includes(groupSearchTerm.toLowerCase())
-    );
-  }, [groups, groupSearchTerm]);
+    let result = [...groups];
 
+    // กรองด้วยคำค้นหาด่านแรก
+    if (groupSearchTerm) {
+      result = result.filter(g => g.group_name.toLowerCase().includes(groupSearchTerm.toLowerCase()));
+    }
+
+    // กรองด้วยแท็บสถานะด่านที่สอง
+    if (groupFilter === 'assigned') {
+      result = result.filter(g => assignedGroupIds.includes(g.id));
+    } else if (groupFilter === 'unassigned') {
+      result = result.filter(g => !assignedGroupIds.includes(g.id));
+    }
+
+    return result;
+  }, [groups, groupSearchTerm, groupFilter, assignedGroupIds]);
+
+  // 🔴 3. ขยายลอจิกการคำนวณ Filter นักเรียนเดี่ยวแบบไฮบริด (คำค้นหา + แท็บสถานะ)
   const filteredStudents = useMemo(() => {
-    if (!studentSearchTerm) return students;
-    return students.filter(s => 
-      s.username?.toLowerCase().includes(studentSearchTerm.toLowerCase()) || 
-      s.name?.toLowerCase().includes(studentSearchTerm.toLowerCase())
-    );
-  }, [students, studentSearchTerm]);
+    let result = [...students];
+
+    // กรองด้วยคำค้นหาด่านแรก
+    if (studentSearchTerm) {
+      result = result.filter(s => 
+        s.username?.toLowerCase().includes(studentSearchTerm.toLowerCase()) || 
+        s.name?.toLowerCase().includes(studentSearchTerm.toLowerCase())
+      );
+    }
+
+    // กรองด้วยแท็บสถานะด่านที่สอง
+    if (studentFilter === 'assigned') {
+      result = result.filter(s => assignedStudentIds.includes(s.id));
+    } else if (studentFilter === 'unassigned') {
+      result = result.filter(s => !assignedStudentIds.includes(s.id));
+    }
+
+    return result;
+  }, [students, studentSearchTerm, studentFilter, assignedStudentIds]);
 
   const handleToggleStudent = (studentId) => {
     setAssignedStudentIds(prev => prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]);
@@ -193,7 +224,6 @@ export default function ManageCourse() {
         </div>
       </div>
 
-      {/* 🔴 ส่วนที่ 1: เปลี่ยนมาใช้ช่องพิมพ์ค้นหา Auto-complete สำหรับคุณครู */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6 overflow-visible">
         <h2 className="text-base font-bold text-gray-800 mb-4 border-b pb-2">1. ค้นหาและเลือกคุณครูผู้สอน</h2>
         <div className="relative w-full md:w-1/2" ref={tutorDropdownRef}>
@@ -204,7 +234,7 @@ export default function ManageCourse() {
             onChange={(e) => {
               setTutorSearchTerm(e.target.value);
               setIsTutorDropdownOpen(true);
-              setSelectedTutorId(''); // ถ้าพิมพ์ใหม่ ให้ปลดการเลือกครูคนเดิมออกก่อน
+              setSelectedTutorId(''); 
             }}
             onFocus={() => setIsTutorDropdownOpen(true)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 bg-white font-medium"
@@ -237,20 +267,28 @@ export default function ManageCourse() {
         <div className="space-y-6">
           {message && <div className={`p-4 rounded-xl text-sm font-semibold border shadow-sm ${message.includes('สำเร็จ') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>{message}</div>}
 
-          {/* 🔴 ส่วนที่ 2: กลุ่มนักเรียน พร้อมช่องกรองข้อมูล */}
+          {/* 🔴 ส่วนที่ 4: เพิ่มชุดปุ่มสลับแท็บตัวกรองให้กับส่วนการรวบรวมกลุ่มเรียน */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-3 gap-3">
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-4 border-b pb-4 gap-3">
               <div>
                 <h2 className="text-base font-bold text-gray-800">2. เลือกกลุ่มนักเรียนที่รับผิดชอบ</h2>
                 <span className="text-sm bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md font-semibold mt-1 inline-block">เลือกแล้ว {assignedGroupIds.length} กลุ่ม</span>
               </div>
-              <input 
-                type="text" 
-                placeholder="🔍 ค้นหากลุ่ม..." 
-                value={groupSearchTerm}
-                onChange={(e) => setGroupSearchTerm(e.target.value)}
-                className="w-full sm:w-64 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition"
-              />
+              <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-stretch sm:items-center">
+                {/* แท็บคัดกรอง 3 โหมด */}
+                <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-lg border text-center text-xs font-bold">
+                  <button type="button" onClick={() => setGroupFilter('all')} className={`px-3 py-1.5 rounded-md transition-all ${groupFilter === 'all' ? 'bg-white text-blue-600 shadow-2xs' : 'text-gray-500 hover:text-gray-700'}`}>ทั้งหมด</button>
+                  <button type="button" onClick={() => setGroupFilter('assigned')} className={`px-3 py-1.5 rounded-md transition-all ${groupFilter === 'assigned' ? 'bg-white text-emerald-600 shadow-2xs' : 'text-gray-500 hover:text-gray-700'}`}>กำลังเลือก</button>
+                  <button type="button" onClick={() => setGroupFilter('unassigned')} className={`px-3 py-1.5 rounded-md transition-all ${groupFilter === 'unassigned' ? 'bg-white text-amber-600 shadow-2xs' : 'text-gray-500 hover:text-gray-700'}`}>ยังไม่ได้เลือก</button>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="🔍 ค้นหากลุ่ม..." 
+                  value={groupSearchTerm}
+                  onChange={(e) => setGroupSearchTerm(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition w-full sm:w-48"
+                />
+              </div>
             </div>
             
             {loadingMapping ? <p className="text-gray-400 py-4 text-center">กำลังโหลดข้อมูลกลุ่ม...</p> : (
@@ -261,26 +299,34 @@ export default function ManageCourse() {
                     <span className={`ml-3 font-semibold text-sm ${assignedGroupIds.includes(group.id) ? 'text-blue-900' : 'text-gray-700'}`}>{group.group_name}</span>
                   </label>
                 )) : (
-                  <div className="col-span-full py-4 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">ไม่พบกลุ่มที่ค้นหา</div>
+                  <div className="col-span-full py-6 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">ไม่พบข้อมูลกลุ่มตามเงื่อนไขที่กำหนด</div>
                 )}
               </div>
             )}
           </div>
 
-          {/* 🔴 ส่วนที่ 3: นักเรียนเดี่ยว พร้อมช่องกรองข้อมูล */}
+          {/* 🔴 ส่วนที่ 5: เพิ่มชุดปุ่มสลับแท็บตัวกรองให้กับส่วนการจัดสิทธิ์นักเรียนรายคน */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-3 gap-3">
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-4 border-b pb-4 gap-3">
               <div>
                 <h2 className="text-base font-bold text-gray-800">3. เลือกนักเรียนเดี่ยวเพิ่มเติม (ถ้ามี)</h2>
                 <span className="text-sm bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md font-semibold mt-1 inline-block">เลือกแล้ว {assignedStudentIds.length} คน</span>
               </div>
-              <input 
-                type="text" 
-                placeholder="🔍 ค้นหานักเรียน..." 
-                value={studentSearchTerm}
-                onChange={(e) => setStudentSearchTerm(e.target.value)}
-                className="w-full sm:w-64 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition"
-              />
+              <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-stretch sm:items-center">
+                {/* แท็บคัดกรอง 3 โหมด */}
+                <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-lg border text-center text-xs font-bold">
+                  <button type="button" onClick={() => setStudentFilter('all')} className={`px-3 py-1.5 rounded-md transition-all ${studentFilter === 'all' ? 'bg-white text-blue-600 shadow-2xs' : 'text-gray-500 hover:text-gray-700'}`}>ทั้งหมด</button>
+                  <button type="button" onClick={() => setStudentFilter('assigned')} className={`px-3 py-1.5 rounded-md transition-all ${studentFilter === 'assigned' ? 'bg-white text-emerald-600 shadow-2xs' : 'text-gray-500 hover:text-gray-700'}`}>กำลังเลือก</button>
+                  <button type="button" onClick={() => setStudentFilter('unassigned')} className={`px-3 py-1.5 rounded-md transition-all ${studentFilter === 'unassigned' ? 'bg-white text-amber-600 shadow-2xs' : 'text-gray-500 hover:text-gray-700'}`}>ยังไม่ได้เลือก</button>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="🔍 ค้นหานักเรียน..." 
+                  value={studentSearchTerm}
+                  onChange={(e) => setStudentSearchTerm(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition w-full sm:w-48"
+                />
+              </div>
             </div>
             
             {loadingMapping ? <p className="text-gray-400 py-4 text-center">กำลังโหลดข้อมูลนักเรียน...</p> : (
@@ -294,7 +340,7 @@ export default function ManageCourse() {
                     </div>
                   </label>
                 )) : (
-                  <div className="col-span-full py-4 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">ไม่พบรายชื่อนักเรียนที่ค้นหา</div>
+                  <div className="col-span-full py-6 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-lg">ไม่พบรายชื่อนักเรียนตามเงื่อนไขที่กำหนด</div>
                 )}
               </div>
             )}

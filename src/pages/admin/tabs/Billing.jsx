@@ -3,7 +3,6 @@ import { supabase } from '../../../lib/supabase';
 import StudentInvoiceModal from '../modals/StudentInvoiceModal';
 import TutorPayslipModal from '../modals/TutorPayslipModal';
 
-// 🔴 1. นำเข้าไลบรารี ZIP และ File Saver เพิ่มเติม
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -49,17 +48,30 @@ export default function Billing() {
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      const [tutorsRes, studentsRes, accountsRes] = await Promise.all([
-        supabase.from('users').select('id, name, username, bank_name, account_name, account_number, qr_code_url').eq('role', 'tutor').order('name'),
-        supabase.from('users').select('id, name, username, grade, company_account_id').eq('role', 'student').order('grade'),
-        supabase.from('company_accounts').select('*').eq('is_active', true)
-      ]);
+      // 🔴 แก้ไข: เปลี่ยนมาใช้ setLoading(true) แทน เพื่อให้ใช้งานได้ถูกต้อง
+      setLoading(true);
       
-      if (tutorsRes.data) setTutors(tutorsRes.data);
-      if (studentsRes.data) setStudents(studentsRes.data);
-      if (accountsRes.data) {
-        setCompanyAccounts(accountsRes.data);
-        if (accountsRes.data.length > 0) setSelectedAccountId(accountsRes.data[0].id);
+      try {
+        const [tutorsRes, studentsRes, accountsRes] = await Promise.all([
+          supabase.from('users')
+            .select('id, name, username, bank_name, account_name, account_number, qr_code_url')
+            .eq('role', 'tutor')
+            .neq('username', 'Classroom')
+            .order('name'),
+          supabase.from('users').select('id, name, username, grade, company_account_id').eq('role', 'student').order('grade'),
+          supabase.from('company_accounts').select('*').eq('is_active', true)
+        ]);
+        
+        if (tutorsRes.data) setTutors(tutorsRes.data);
+        if (studentsRes.data) setStudents(studentsRes.data);
+        if (accountsRes.data) {
+          setCompanyAccounts(accountsRes.data);
+          if (accountsRes.data.length > 0) setSelectedAccountId(accountsRes.data[0].id);
+        }
+      } catch (error) {
+        console.error("Error fetching users:", error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchInitialData();
@@ -128,13 +140,32 @@ export default function Billing() {
     logs.forEach(log => {
       const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
       const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
-      const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+
+      // 🔴 2. แปลงเวลาจริงเป็นรอบ เพื่อออกบิลให้ตรง
+      let amount = 0;
+      let roundsForDisplay = null;
+      const isClassroom = (activeTab === 'student' && log.users?.username === 'Classroom') || (activeTab === 'tutor' && selectedUserDetails?.username === 'Classroom');
+      
+      if (isClassroom) {
+        let rounds = 1;
+        const courseName = log.custom_courses?.course_name || '';
+        const match = courseName.match(/\(([\d.]+) ชม\.\/รอบ/);
+        
+        if (match) {
+           rounds = Number(log.duration_hours) / Number(match[1]);
+           roundsForDisplay = rounds; // จำรอบไว้โชว์ในบิล
+        }
+        amount = Math.round(rounds * ratePerHour * 100) / 100;
+      } else {
+        amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+      }
       
       tHrs += Number(log.duration_hours);
       tAmt += amount;
 
-      const processedLog = { ...log, grade, ratePerHour, amount };
-      computedLogs.push(processedLog); 
+      // แอบแนบ roundsForDisplay ไปกับ log เพื่อให้ไปโชว์ในตารางข้างล่างได้
+      const processedLog = { ...log, grade, ratePerHour, amount, roundsForDisplay };
+      computedLogs.push(processedLog);
 
       const counterpartyId = activeTab === 'tutor' ? log.student_id : log.tutor_id;
       
@@ -160,7 +191,7 @@ export default function Billing() {
     });
 
     return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs, groupedLogs: Object.values(groupedObj) };
-  }, [logs, activeTab]);
+  }, [logs, activeTab, selectedUserDetails]);
 
   const handleBatchDownload = async () => {
     setIsBatchDownloading(true);
@@ -215,11 +246,9 @@ export default function Billing() {
     setBatchRenderData(preparedData);
   };
 
-  // 🔴 4. Effect ดักรอถ่ายรูปและมัดรวมเป็น ZIP (เวอร์ชันแก้ไขบั๊ครูปขาดบน iOS Safari)
   useEffect(() => {
     if (batchRenderData && batchRenderData.length > 0) {
       const generateImages = async () => {
-        // สั่งให้ทั้งหน้าจอเตรียมพร้อมกาง UI ห้องลับออกมาให้เสร็จก่อนในรอบแรก
         await new Promise(resolve => setTimeout(resolve, 2500));
         
         const zip = new JSZip();
@@ -230,20 +259,16 @@ export default function Billing() {
           const el = document.getElementById(`batch-slip-${userData.user.id}`);
           if (el) {
             try {
-              // 💡 ปรับปรุงจุดที่ 1: หน่วงเวลาก่อนถ่ายแต่ละใบเพิ่มขึ้นเล็กน้อย เพื่อให้ iOS Safari วาดตารางทัน
               await new Promise(resolve => setTimeout(resolve, 600));
 
-              // 💡 ปรับปรุงจุดที่ 2 (ท่าไม้ตาย iOS): สั่งเรนเดอร์รอบแรกทิ้ง เพื่อบีบให้ Safari โหลดภาพเข้าแคช
               await toJpeg(el, { quality: 0.1, backgroundColor: '#ffffff' });
               
-              // สั่งเรนเดอร์รอบสองเพื่อดึงข้อมูลภาพที่แท้จริงที่สมบูรณ์แบบ
               const dataUrl = await toJpeg(el, { 
-                quality: 0.95, // 💡 ปรับปรุงจุดที่ 3: ลดเหลือ 95% เพื่อเซฟแรมมือถือ ไม่ให้เครื่องค้าง
+                quality: 0.95, 
                 backgroundColor: '#ffffff', 
                 pixelRatio: 2 
               });
               
-              // ตัดข้อความส่วนหัวออกเพื่อเอาข้อมูลภาพเพียวๆ
               const base64Data = dataUrl.split(',')[1];
               
               const prefix = activeTab === 'tutor' ? 'Payslip' : 'Invoice';
@@ -257,7 +282,6 @@ export default function Billing() {
         }
         
         try {
-          // สั่งแพ็กไฟล์ ZIP แล้วดาวน์โหลดลงเครื่อง
           const content = await zip.generateAsync({ type: 'blob' });
           saveAs(content, `${folderName}.zip`);
           alert(`ดาวน์โหลดไฟล์ ${folderName}.zip เรียบร้อยแล้ว!`);
@@ -266,7 +290,6 @@ export default function Billing() {
           alert('เกิดข้อผิดพลาดในการสร้างไฟล์ ZIP');
         }
         
-        // เคลียร์ข้อมูลและปิดสถานะโหลด
         setBatchRenderData(null);
         setIsBatchDownloading(false);
       };
@@ -443,7 +466,10 @@ export default function Billing() {
                                       <span>ครั้งที่ {index + 1} : {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long' })}{session.grade ? ` (${session.grade})` : ''}</span>
                                     </div>
                                   </td>
-                                  <td className="p-2.5 text-center font-bold text-gray-700">{session.duration_hours}</td>
+                                  <td className="p-2.5 text-center font-bold text-gray-700">
+                                    {session.duration_hours} 
+                                    {session.roundsForDisplay && <span className="block text-[10px] text-emerald-600">({session.roundsForDisplay} รอบ)</span>}
+                                  </td>
                                   <td className="p-2.5 text-right text-gray-400 text-xs">฿{session.ratePerHour}</td>
                                   <td className="p-2.5 text-right font-bold text-gray-700">฿{session.amount.toLocaleString()}</td>
                                 </tr>

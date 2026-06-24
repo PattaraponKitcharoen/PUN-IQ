@@ -10,6 +10,7 @@ import ManageSubject from './tabs/ManageSubject';
 import ManageCustomCourse from './tabs/ManageCustomCourse';
 import ManageCompanyAccount from './tabs/ManageCompanyAccount';
 import Billing from './tabs/Billing';
+import ReserveRoom from './tabs/ReserveRoom'; // 🔴 1. Import หน้า Reserve Room
 
 export default function AdminLayout() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -27,6 +28,7 @@ export default function AdminLayout() {
       case 'custom-courses': return <ManageCustomCourse />;
       case 'company': return <ManageCompanyAccount />;
       case 'billing': return <Billing />;
+      case 'reserve-room': return <ReserveRoom />; // 🔴 2. เพิ่ม Case สำหรับเมนูเช่าห้อง
       default: return <Dashboard />;
     }
   };

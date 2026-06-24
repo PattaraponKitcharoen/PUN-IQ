@@ -6,27 +6,71 @@ export default function EditTimeLog() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // รับข้อมูล log ที่ส่งข้ามหน้ามาจาก HistoryLog.jsx
   const log = location.state?.log; 
 
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [topic, setTopic] = useState('');
+  
+  // 🔴 1. เพิ่ม State สำหรับจัดการแพ็กเกจ
+  const [learningType, setLearningType] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [customCourses, setCustomCourses] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ถ้าไม่มีข้อมูล log (เช่น แอบพิมพ์ URL เข้ามาตรงๆ) ให้เด้งกลับไปหน้าประวัติ
+  const [isClassroomTutor, setIsClassroomTutor] = useState(false);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('username')
+          .eq('id', session.user.id)
+          .single();
+        if (profile?.username === 'Classroom') {
+          setIsClassroomTutor(true);
+        }
+      }
+    };
+    checkUser();
+  }, []);
+
   useEffect(() => {
     if (!log) {
-      // 🔴 อัปเดตให้เด้งกลับไปหน้าประวัติ (history)
       navigate('/tutor/history', { replace: true });
       return;
     }
     setDate(log.teaching_date || '');
     setStartTime(log.start_time ? log.start_time.substring(0, 5) : ''); 
     setEndTime(log.end_time ? log.end_time.substring(0, 5) : '');
-    setTopic(log.topic || '');
+    
+    setLearningType(log.learning_type || '');
+    setSelectedCourseId(log.custom_course_id || '');
+
+    let cleanTopic = log.topic || '';
+    cleanTopic = cleanTopic.replace(/\[เกณฑ์: .*?\]\s*/g, '');
+    cleanTopic = cleanTopic.replace(/\s*\((เวลาจริง|เวลาที่ใช้): [\d.]+ ชม\.\)/g, '');
+    setTopic(cleanTopic.trim());
+
+    // 🔴 2. ดึงข้อมูลแพ็กเกจทั้งหมดของนักเรียน/ผู้เช่า คนนี้มาเป็นตัวเลือก
+    const fetchCourses = async () => {
+      if (log.learning_type === 'course' && log.student_id && log.tutor_id) {
+        const { data } = await supabase
+          .from('custom_courses')
+          .select('*')
+          .eq('tutor_id', log.tutor_id)
+          .eq('student_id', log.student_id)
+          .eq('is_active', true);
+        
+        if (data) setCustomCourses(data);
+      }
+    };
+    fetchCourses();
   }, [log, navigate]);
 
   if (!log) return null;
@@ -37,18 +81,43 @@ export default function EditTimeLog() {
     setError('');
 
     try {
-      // 1. คำนวณเวลาสอนใหม่
-      const start = new Date(`1970-01-01T${startTime}:00`);
-      const end = new Date(`1970-01-01T${endTime}:00`);
+      const start = new Date(`2000-01-01T${startTime}:00`);
+      const end = new Date(`2000-01-01T${endTime}:00`);
       let diff = (end - start) / (1000 * 60 * 60);
+      
+      if (diff < 0) diff += 24;
 
       if (diff <= 0) {
-        throw new Error('เวลาสิ้นสุดต้องมากกว่าเวลาเริ่มสอน');
+        throw new Error('เวลาที่ระบุไม่ถูกต้อง');
       }
 
-      const duration_hours = Math.round(diff * 100) / 100;
+      const duration_hours = Number(diff.toFixed(2));
 
-      // 2. อัปเดตข้อมูลลง Database
+      // 🔴 3. ตรวจสอบว่าถ้ามีการเปลี่ยนแพ็กเกจ ให้ดึงเรทราคาและเกณฑ์ของแพ็กเกจใหม่มาใช้
+      let newAppliedStudentRate = log.applied_student_rate;
+      let newAppliedTutorRate = log.applied_tutor_rate;
+      let newCourseName = log.custom_courses?.course_name || '';
+
+      if (learningType === 'course' && selectedCourseId) {
+        const selectedCourse = customCourses.find(c => String(c.id) === String(selectedCourseId));
+        if (selectedCourse) {
+          newAppliedStudentRate = selectedCourse.student_hourly_rate;
+          newAppliedTutorRate = selectedCourse.tutor_hourly_rate;
+          newCourseName = selectedCourse.course_name;
+        }
+      }
+
+      let finalTopic = topic;
+      if (isClassroomTutor && learningType === 'course') {
+        let ruleText = "";
+        // 🔴 4. ใช้ชื่อแพ็กเกจใหม่ในการสร้าง Rule Text สำหรับคำนวณบิล
+        if (newCourseName) {
+          const ruleMatch = newCourseName.match(/\(([\d.]+ ชม\.\/รอบ = [\d.]+ บาท)\)/);
+          if (ruleMatch) ruleText = `[เกณฑ์: ${ruleMatch[1]}]`;
+        }
+        finalTopic = `${ruleText ? ruleText + ' ' : ''}${topic ? topic + ' ' : ''}(เวลาจริง: ${duration_hours.toFixed(2)} ชม.)`;
+      }
+
       const { error: updateError } = await supabase
         .from('teaching_logs')
         .update({
@@ -56,13 +125,15 @@ export default function EditTimeLog() {
           start_time: startTime,
           end_time: endTime,
           duration_hours: duration_hours,
-          topic: topic
+          topic: finalTopic,
+          custom_course_id: selectedCourseId || null,
+          applied_student_rate: newAppliedStudentRate,
+          applied_tutor_rate: newAppliedTutorRate
         })
         .eq('id', log.id);
 
       if (updateError) throw new Error(updateError.message);
 
-      // 🔴 บันทึกสำเร็จ ให้เด้งกลับไปหน้าตารางประวัติ (history)
       navigate('/tutor/history');
     } catch (err) {
       setError(err.message);
@@ -82,22 +153,51 @@ export default function EditTimeLog() {
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">แก้ไขประวัติการสอน</h1>
-          <p className="text-gray-500 text-sm mt-1">อัปเดตเวลาและเนื้อหาของคลาสเรียน</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {isClassroomTutor ? 'แก้ไขประวัติการใช้งาน' : 'แก้ไขประวัติการสอน'}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {isClassroomTutor ? 'อัปเดตเวลา แพ็กเกจ และรายละเอียดการใช้สถานที่' : 'อัปเดตเวลาและเนื้อหาของคลาสเรียน'}
+          </p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="bg-amber-50 border-b border-amber-100 p-4 px-6 flex items-center">
-          <svg className="w-5 h-5 text-amber-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <span className="text-sm font-medium text-amber-800">กำลังแก้ไขข้อมูลของนักเรียน: <span className="font-bold">{log.users?.name || log.users?.username}</span></span>
+          <svg className="w-5 h-5 text-amber-500 mr-2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span className="text-sm font-medium text-amber-800 truncate">
+            กำลังแก้ไขข้อมูลของ{isClassroomTutor ? 'ผู้เช่า: ' : 'นักเรียน: '} 
+            <span className="font-bold">{log.users?.name || log.users?.username}</span>
+          </span>
         </div>
 
         <form onSubmit={handleUpdate} className="p-6 md:p-8 space-y-6">
           {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center"><svg className="w-5 h-5 mr-2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
 
+          {/* 🔴 5. กล่องเลือกแพ็กเกจ (แสดงเฉพาะเมื่อ Log เดิมเป็นประเภท Course) */}
+          {learningType === 'course' && (
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                {isClassroomTutor ? 'แพ็กเกจสถานที่ที่ใช้งาน' : 'คอร์สพิเศษที่ใช้งาน'}
+              </label>
+              <select 
+                value={selectedCourseId} 
+                onChange={(e) => setSelectedCourseId(e.target.value)} 
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none font-medium"
+                required
+              >
+                <option value="">-- เลือกแพ็กเกจ --</option>
+                {customCourses.map(course => (
+                  <option key={course.id} value={course.id}>{course.course_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2">วันที่สอน</label>
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              {isClassroomTutor ? 'วันที่ใช้งาน' : 'วันที่สอน'}
+            </label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition" required />
           </div>
 
@@ -113,12 +213,14 @@ export default function EditTimeLog() {
           </div>
 
           <div>
-            <label className="block text-gray-700 text-sm font-bold mb-2">เนื้อหาที่สอน / รายละเอียด (Topic)</label>
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              {isClassroomTutor ? 'บันทึกช่วยจำ (เพิ่มเติม)' : 'เนื้อหาที่สอน / รายละเอียด (Topic)'}
+            </label>
             <textarea 
               value={topic} 
               onChange={(e) => setTopic(e.target.value)} 
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none h-32 resize-none bg-gray-50 hover:bg-white transition" 
-              placeholder="ระบุเนื้อหาที่สอน ความคืบหน้า หรือการบ้านที่สั่ง..."
+              placeholder={isClassroomTutor ? "โน้ตเพิ่มเติมสำหรับการใช้งานสถานที่..." : "ระบุเนื้อหาที่สอน ความคืบหน้า หรือการบ้านที่สั่ง..."}
             ></textarea>
           </div>
 
