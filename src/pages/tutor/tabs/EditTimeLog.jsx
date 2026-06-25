@@ -13,7 +13,6 @@ export default function EditTimeLog() {
   const [endTime, setEndTime] = useState('');
   const [topic, setTopic] = useState('');
   
-  // 🔴 1. เพิ่ม State สำหรับจัดการแพ็กเกจ
   const [learningType, setLearningType] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [customCourses, setCustomCourses] = useState([]);
@@ -57,17 +56,25 @@ export default function EditTimeLog() {
     cleanTopic = cleanTopic.replace(/\s*\((เวลาจริง|เวลาที่ใช้): [\d.]+ ชม\.\)/g, '');
     setTopic(cleanTopic.trim());
 
-    // 🔴 2. ดึงข้อมูลแพ็กเกจทั้งหมดของนักเรียน/ผู้เช่า คนนี้มาเป็นตัวเลือก
     const fetchCourses = async () => {
-      if (log.learning_type === 'course' && log.student_id && log.tutor_id) {
+      if (log.learning_type === 'course' && log.tutor_id) {
+        // 🔴 3. ดึงคอร์สจากตารางเชื่อม course_tutors สำหรับหน้า Edit ด้วย
         const { data } = await supabase
-          .from('custom_courses')
-          .select('*')
-          .eq('tutor_id', log.tutor_id)
-          .eq('student_id', log.student_id)
-          .eq('is_active', true);
+          .from('course_tutors')
+          .select('custom_courses(*)')
+          .eq('tutor_id', log.tutor_id);
         
-        if (data) setCustomCourses(data);
+        if (data) {
+          const activeCourses = data.map(ct => ct.custom_courses).filter(c => c && c.is_active);
+          
+          // กรองให้เหลือเฉพาะคอร์สที่เกี่ยวข้องกับนักเรียนหรือเปิดกว้าง
+          const filteredForEdit = activeCourses.filter(c => 
+             !c.student_id && !c.group_id || // เป็นคอร์สแบบ Custom
+             String(c.student_id) === String(log.student_id) || // เป็นคอร์สเดี่ยวของนักเรียนคนนี้
+             String(c.id) === String(log.custom_course_id) // เป็นคอร์สเดิมที่เลือกอยู่แล้ว
+          );
+          setCustomCourses(filteredForEdit);
+        }
       }
     };
     fetchCourses();
@@ -93,7 +100,6 @@ export default function EditTimeLog() {
 
       const duration_hours = Number(diff.toFixed(2));
 
-      // 🔴 3. ตรวจสอบว่าถ้ามีการเปลี่ยนแพ็กเกจ ให้ดึงเรทราคาและเกณฑ์ของแพ็กเกจใหม่มาใช้
       let newAppliedStudentRate = log.applied_student_rate;
       let newAppliedTutorRate = log.applied_tutor_rate;
       let newCourseName = log.custom_courses?.course_name || '';
@@ -110,7 +116,6 @@ export default function EditTimeLog() {
       let finalTopic = topic;
       if (isClassroomTutor && learningType === 'course') {
         let ruleText = "";
-        // 🔴 4. ใช้ชื่อแพ็กเกจใหม่ในการสร้าง Rule Text สำหรับคำนวณบิล
         if (newCourseName) {
           const ruleMatch = newCourseName.match(/\(([\d.]+ ชม\.\/รอบ = [\d.]+ บาท)\)/);
           if (ruleMatch) ruleText = `[เกณฑ์: ${ruleMatch[1]}]`;
@@ -174,7 +179,6 @@ export default function EditTimeLog() {
         <form onSubmit={handleUpdate} className="p-6 md:p-8 space-y-6">
           {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm flex items-center"><svg className="w-5 h-5 mr-2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
 
-          {/* 🔴 5. กล่องเลือกแพ็กเกจ (แสดงเฉพาะเมื่อ Log เดิมเป็นประเภท Course) */}
           {learningType === 'course' && (
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
               <label className="block text-gray-700 text-sm font-bold mb-2">

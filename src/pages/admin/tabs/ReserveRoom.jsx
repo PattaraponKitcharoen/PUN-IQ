@@ -20,7 +20,6 @@ export default function ReserveRoom() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  // 🔴 1. เพิ่ม State สำหรับคุมการเข้าโหมดแก้ไข
   const [editingPackageId, setEditingPackageId] = useState(null);
 
   useEffect(() => {
@@ -51,10 +50,15 @@ export default function ReserveRoom() {
     }
   };
 
+  // 🔴 1. ปรับปรุงการอ่านข้อมูลสิทธิ์ห้องเช่าผ่านตารางเชื่อม Many-to-Many
   const fetchRoomPackages = async (tutorId) => {
-    const { data } = await supabase.from('custom_courses')
-      .select('*, student:users!custom_courses_student_id_fkey(name, username)')
-      .eq('tutor_id', tutorId)
+    const { data, error } = await supabase.from('custom_courses')
+      .select(`
+        *, 
+        student:users!custom_courses_student_id_fkey(name, username),
+        course_tutors!inner(tutor_id)
+      `)
+      .eq('course_tutors.tutor_id', tutorId)
       .order('created_at', { ascending: false });
       
     if (data) setRoomPackages(data);
@@ -73,14 +77,12 @@ export default function ReserveRoom() {
     );
   }, [students, studentSearchTerm]);
 
-  // 🔴 2. ฟังก์ชันจับข้อมูลในตารางมากางกระจายลงฟอร์มเมื่อคลิกแก้ไข
   const handleEditClick = (pkg) => {
     setEditingPackageId(pkg.id);
     setSelectedStudentId(pkg.student_id);
     setStudentSearchTerm(`${pkg.student?.username} ${pkg.student?.name ? `(${pkg.student?.name})` : ''}`);
     setPricePerRound(pkg.student_hourly_rate);
     
-    // แกะเอาชื่อห้องตั้งต้นและเกณฑ์ชั่วโมงออกจากข้อความยาวๆ เพื่อส่งคืนลงช่องกรอก
     let baseName = pkg.course_name;
     const match = pkg.course_name.match(/(.*) \(([\d.]+) ชม\.\/รอบ/);
     if (match) {
@@ -91,10 +93,9 @@ export default function ReserveRoom() {
     }
     setRoomName(baseName);
     setMessage('');
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // เลื่อนจอขึ้นบนสุดให้เห็นฟอร์มชัดๆ
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
-  // 🔴 3. ฟังก์ชันล้างค่ากลับคืนสถานะปกติ
   const handleCancelEdit = () => {
     setEditingPackageId(null);
     setRoomName('');
@@ -121,8 +122,8 @@ export default function ReserveRoom() {
       const displayName = roomName.trim() ? roomName.trim() : 'เช่าห้อง';
       const courseName = `${displayName} (${hoursPerRound} ชม./รอบ = ${pricePerRound} บาท)`;
 
+      // 🔴 2. ถอดคอลัมน์ tutor_id ออกจาก Payload หลักของตาราง custom_courses
       const payload = {
-        tutor_id: dummyTutorId,
         student_id: selectedStudentId,
         course_name: courseName,
         grade_level: 'สถานที่',
@@ -131,7 +132,6 @@ export default function ReserveRoom() {
       };
 
       if (editingPackageId) {
-        // 🔴 4. กรณีโหมดแก้ไข: สั่ง UPDATE ข้อมูล
         const { error } = await supabase
           .from('custom_courses')
           .update(payload)
@@ -140,12 +140,24 @@ export default function ReserveRoom() {
         if (error) throw error;
         setMessage('✅ อัปเดตรายละเอียดสิทธิ์แพ็กเกจเช่าห้องเรียนสำเร็จ!');
       } else {
-        // กรณีโหมดปกติ: สั่ง INSERT สร้างใหม่
-        const { error: courseError } = await supabase
+        // 🔴 3. บันทึกคอร์สใหม่ลงตาราง และดึง ID ออกมาผูกตารางเชื่อมต่อ
+        const { data: newCourse, error: courseError } = await supabase
           .from('custom_courses')
-          .insert([payload]);
+          .insert([payload])
+          .select()
+          .single();
 
         if (courseError) throw courseError;
+
+        // 🔴 4. นำ ID คอร์สเช่าสถานที่ใหม่คู่กับไอดี Classroom ไปผูกตารางเชื่อม course_tutors
+        const { error: junctionError } = await supabase
+          .from('course_tutors')
+          .insert([{
+             course_id: newCourse.id,
+             tutor_id: dummyTutorId
+          }]);
+
+        if (junctionError) throw junctionError;
 
         const { data: checkExist } = await supabase
           .from('tutor_students')
@@ -210,7 +222,6 @@ export default function ReserveRoom() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* ฟอร์มด้านซ้าย */}
         <div className={`bg-white rounded-xl shadow-sm border p-6 lg:col-span-1 h-fit transition-all ${editingPackageId ? 'border-amber-400 ring-4 ring-amber-50' : 'border-gray-200'}`}>
           <h2 className={`text-base font-bold mb-4 border-b pb-2 ${editingPackageId ? 'text-amber-600' : 'text-gray-800'}`}>
             {editingPackageId ? 'แก้ไขข้อมูลแพ็กเกจห้องเช่า' : 'ออกแพ็กเกจสิทธิ์ใหม่'}
@@ -278,7 +289,6 @@ export default function ReserveRoom() {
               </div>
             </div>
 
-            {/* 🔴 5. ปุ่มแอคชัน ปรับเปลี่ยนรูปแบบตามโหมดสร้าง/แก้ไขอัตโนมัติ */}
             <div className="flex space-x-2 pt-2">
               {editingPackageId && (
                 <button type="button" onClick={handleCancelEdit} className="w-1/3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg transition text-sm">ยกเลิก</button>
@@ -294,7 +304,6 @@ export default function ReserveRoom() {
           </form>
         </div>
 
-        {/* ตารางโชว์รายการแพ็กเกจด้านขวา */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 lg:col-span-2 overflow-hidden">
           <h2 className="text-base font-bold text-gray-800 mb-4 border-b pb-2">สิทธิ์แพ็กเกจห้องเช่าปัจจุบัน ({roomPackages.length})</h2>
           
@@ -324,7 +333,6 @@ export default function ReserveRoom() {
                       </td>
                       <td className="p-3 text-right font-bold text-gray-800">฿{pkg.student_hourly_rate}</td>
                       <td className="p-3">
-                        {/* 🔴 6. เพิ่มปุ่มรูปดินสอแก้ไข และปรับแต่งการวางตำแหน่งปุ่มให้สวยงาม */}
                         <div className="flex items-center justify-center space-x-3">
                           <input 
                             title="สลับการเปิด/ปิดใช้งาน"

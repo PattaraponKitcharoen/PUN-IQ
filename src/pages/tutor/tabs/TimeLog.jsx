@@ -19,10 +19,7 @@ export default function TimeLog() {
 
   const isSubmitting = useRef(false);
 
-  // logType: 'individual' | 'group' | 'bulk' (ลงเวลาต่อเนื่อง)
   const [logType, setLogType] = useState('individual'); 
-
-  // State เลือกประเภทการลงเวลาต่อเนื่องย่อย (เดี่ยว / กลุ่ม)
   const [bulkTargetType, setBulkTargetType] = useState('individual'); 
 
   const [studentId, setStudentId] = useState('');
@@ -97,13 +94,20 @@ export default function TimeLog() {
     if (subsData) setSubjectsList(subsData);
 
     if (tutorId) {
-      const [ratesRes, customCoursesRes] = await Promise.all([
+      // 🔴 1. ปรับ Query สำหรับดึงคอร์สแบบ Many-to-Many
+      const [ratesRes, tutorCoursesRes] = await Promise.all([
         supabase.from('pricing_rates').select('*'),
-        supabase.from('custom_courses').select('*').eq('tutor_id', tutorId).eq('is_active', true)
+        supabase.from('course_tutors').select('custom_courses(*)').eq('tutor_id', tutorId)
       ]);
 
       if (ratesRes.data) setPricingRates(ratesRes.data);
-      if (customCoursesRes.data) setCustomCourses(customCoursesRes.data);
+      if (tutorCoursesRes.data) {
+        // แตกโครงสร้างเอาเฉพาะ custom_courses ออกมา
+        const activeCourses = tutorCoursesRes.data
+          .map(ct => ct.custom_courses)
+          .filter(c => c && c.is_active === true);
+        setCustomCourses(activeCourses);
+      }
 
       const { data: indMap } = await supabase.from('tutor_students').select('student_id').eq('tutor_id', tutorId);
       const indStudentIds = indMap?.map(m => m.student_id) || [];
@@ -148,7 +152,11 @@ export default function TimeLog() {
     }
   }, [groupId, isCurrentGroupMode, groupMembers]);
 
+  // 🔴 2. ปรับการกรองคอร์สให้รองรับโหมด Custom (ไม่ผูกใครเลย)
   const filteredCustomCourses = customCourses.filter(course => {
+    // ถ้าคอร์สเป็นแบบ Custom (ไม่ผูกเด็ก/กลุ่ม) โชว์เสมอ
+    if (!course.student_id && !course.group_id) return true;
+
     if (isCurrentGroupMode) {
       return course.group_id === groupId;
     } else {
@@ -326,7 +334,6 @@ export default function TimeLog() {
     }
   };
 
-  // 🔴 ประกาศตัวแปรนี้กลับเข้ามาเพื่อจัดการแสดงผลนักเรียนในกลุ่ม
   const studentsInThisGroupDetails = myStudents.filter(s => groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id).includes(s.id));
   
   const isTargetSelected = isCurrentGroupMode ? groupId : studentId;
@@ -442,7 +449,7 @@ export default function TimeLog() {
           {isTargetSelected && learningType === 'course' && (
             <div className="animate-fadeIn">
               <label className={`block text-xs font-bold uppercase mb-1 ${isClassroomTutor ? 'text-emerald-800' : 'text-amber-800'}`}>
-                {isClassroomTutor ? 'เลือกแพ็กเกจสิทธิ์เช่าสถานที่' : 'เลือกคอร์สพิเศษของนักเรียน'}
+                {isClassroomTutor ? 'เลือกแพ็กเกจสิทธิ์เช่าสถานที่' : 'เลือกคอร์สพิเศษ'}
               </label>
               <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:ring-2 outline-none font-semibold ${isClassroomTutor ? 'bg-emerald-50/50 border-emerald-300 text-emerald-950 focus:ring-emerald-500' : 'border-amber-300 bg-amber-50/50 text-amber-950 focus:ring-amber-500'}`} required>
                 <option value="">-- {isClassroomTutor ? 'เลือกแพ็กเกจสิทธิ์สถานที่' : 'เลือกคอร์สพิเศษ'} --</option>
@@ -451,7 +458,7 @@ export default function TimeLog() {
                 ))}
               </select>
               {filteredCustomCourses.length === 0 && (
-                <p className="text-[10px] text-red-500 mt-1">⚠️ ไม่พบ{isClassroomTutor ? 'สิทธิ์แพ็กเกจสถานที่' : 'วิชาในระบบคอร์สพิเศษ'}ของรายชื่อนี้</p>
+                <p className="text-[10px] text-red-500 mt-1">⚠️ ไม่พบ{isClassroomTutor ? 'สิทธิ์แพ็กเกจสถานที่' : 'วิชาในระบบคอร์สพิเศษ'} กรุณาให้ Admin กำหนดสิทธิ์ให้ก่อน</p>
               )}
             </div>
           )}
