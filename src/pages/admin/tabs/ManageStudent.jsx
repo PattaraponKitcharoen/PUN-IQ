@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import AddStudentModal from '../modals/AddStudentModal';
 import EditStudentInfoModal from '../modals/EditStudentInfoModal';
-import ConfirmResetPasswordModal from '../modals/ConfirmResetPasswordModal'; 
+// 🔴 เปลี่ยนจาก ConfirmResetPasswordModal เป็น EditPasswordModal
+import EditPasswordModal from '../modals/EditPasswordModal'; 
 import ConfirmDeleteStudentModal from '../modals/ConfirmDeleteStudentModal';
 import EditStudentAccountModal from '../modals/EditStudentAccountModal';
 
@@ -16,7 +17,6 @@ export default function ManageStudent() {
 
   const [showEditInfoModal, setShowEditInfoModal] = useState(false);
   const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
-  // 🔴 2. เพิ่ม State สำหรับ Modal เลือกบัญชี
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -36,7 +36,6 @@ export default function ManageStudent() {
 
     let query = supabase
       .from('users')
-      // 🔴 3. เพิ่มการดึง company_account_id เพื่อให้ปุ่มใหม่มีข้อมูลตั้งต้นไปแสดง
       .select('id, name, username, grade, phone, email, company_account_id', { count: 'exact' })
       .eq('role', 'student');
 
@@ -102,7 +101,6 @@ export default function ManageStudent() {
               type="text"
               placeholder="ค้นหาชื่อ หรือ Username นักเรียน..."
               value={searchTerm}
-              // 🔴 แก้ onChange ให้เซ็ตหน้าปัจจุบันกลับเป็นหน้า 1 ทันทีที่พิมพ์
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
@@ -153,7 +151,6 @@ export default function ManageStudent() {
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
                       
-                      {/* 🔴 4. เพิ่มปุ่มตั้งค่าบัญชี (สีเขียว) แทรกตรงกลาง */}
                       <button onClick={() => { setSelectedStudent(student); setShowEditAccountModal(true); }} title="ตั้งค่าบัญชีรับเงิน" className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -208,9 +205,10 @@ export default function ManageStudent() {
 
       <AddStudentModal isOpen={showAddModal} onClose={handleCloseAddModal} />
       <EditStudentInfoModal isOpen={showEditInfoModal} onClose={() => setShowEditInfoModal(false)} student={selectedStudent} onSuccess={fetchStudents} />
-      <ConfirmResetPasswordModal isOpen={showEditPasswordModal} onClose={() => setShowEditPasswordModal(false)} tutor={selectedStudent} />
       
-      {/* 🔴 5. เรียกใช้ Modal ตัวใหม่ */}
+      {/* 🔴 เรียกใช้ Modal ใหม่ตรงนี้ โดยดัดแปลง Prop เล็กน้อย */}
+      <EditPasswordModal isOpen={showEditPasswordModal} onClose={() => setShowEditPasswordModal(false)} user={selectedStudent} />
+      
       <EditStudentAccountModal isOpen={showEditAccountModal} onClose={() => setShowEditAccountModal(false)} student={selectedStudent} onSuccess={fetchStudents} />
       <ConfirmDeleteStudentModal 
         isOpen={showDeleteModal} 

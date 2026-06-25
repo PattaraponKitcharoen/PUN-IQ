@@ -16,10 +16,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [isAdding, setIsAdding] = useState(false);
   const [allStudents, setAllStudents] = useState([]);
   
-  // State สำหรับระบบ 3 โหมด (รายบุคคล, รายกลุ่ม, ต่อเนื่อง)
   const [logType, setLogType] = useState('individual'); 
-  
-  // 🔴 1. State เลือกว่าจะลงต่อเนื่องแบบเดี่ยวหรือกลุ่ม
   const [bulkTargetType, setBulkTargetType] = useState('individual');
 
   const [addStudentId, setAddStudentId] = useState('');
@@ -64,8 +61,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [pricingRates, setPricingRates] = useState([]);
 
   const isClassroomTutor = tutor?.username === 'Classroom';
-
-  // 🔴 2. ตัวแปรตรวจสอบสถานะว่ากำลังทำงานบนฟอร์มรายกลุ่มอยู่หรือไม่ (สำคัญมากสำหรับสลับโหมด Bulk)
   const isCurrentGroupMode = logType === 'group' || (logType === 'bulk' && bulkTargetType === 'group');
 
   useEffect(() => {
@@ -144,23 +139,32 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   const fetchLogs = async () => {
     setLoading(true);
-    const [subsRes, coursesRes, membersRes, ratesRes, studentsRes, grpMapRes, groupsRes, tutorProfileRes] = await Promise.all([
+    
+    // 🔴 1. เปลี่ยนมาดึง Custom Courses ผ่านตาราง course_tutors แทน
+    const [subsRes, membersRes, ratesRes, studentsRes, grpMapRes, groupsRes, tutorProfileRes, tutorCoursesRes] = await Promise.all([
       supabase.from('subjects').select('*').order('subject_name'),
-      supabase.from('custom_courses').select('id, course_name, grade_level, student_id, group_id, student_hourly_rate, tutor_hourly_rate').eq('tutor_id', tutor.id),
       supabase.from('group_members').select('group_id, student_id'),
       supabase.from('pricing_rates').select('*'),
       supabase.from('users').select('id, name, username, grade').eq('role', 'student').order('username'),
       supabase.from('tutor_groups').select('group_id').eq('tutor_id', tutor.id),
       supabase.from('groups').select('*').order('group_name'),
-      supabase.from('users').select('is_vip').eq('id', tutor.id).single()
+      supabase.from('users').select('is_vip').eq('id', tutor.id).single(),
+      supabase.from('course_tutors').select('custom_courses(*)').eq('tutor_id', tutor.id)
     ]);
     
     if (subsRes.data) setSubjectsList(subsRes.data);
-    if (coursesRes.data) setCustomCoursesList(coursesRes.data);
     if (membersRes.data) setGroupMembers(membersRes.data);
     if (ratesRes.data) setPricingRates(ratesRes.data);
     if (studentsRes.data) setAllStudents(studentsRes.data);
     if (tutorProfileRes.data) setTutorIsVip(tutorProfileRes.data.is_vip);
+
+    // แกะข้อมูลคอร์สที่ active ออกมา
+    if (tutorCoursesRes.data) {
+      const activeCourses = tutorCoursesRes.data
+        .map(ct => ct.custom_courses)
+        .filter(c => c && c.is_active === true);
+      setCustomCoursesList(activeCourses);
+    }
 
     if (grpMapRes.data && groupsRes.data) {
       const mappedGrpIds = grpMapRes.data.map(g => g.group_id);
@@ -342,11 +346,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
       }
 
       let inserts = [];
-      // 🔴 3. แยกการเก็บข้อมูลตามเป้าหมาย (รับมือทั้งแบบเดี่ยวและแบบกลุ่มพร้อมกัน)
       const targets = isCurrentGroupMode ? presentStudentIds : [addStudentId];
 
       if (logType === 'bulk') {
-        // คูณรอบกระจายการเซฟข้อมูล
         targets.forEach(sId => {
           bulkRows.forEach(row => {
             let finalTopic = row.topic;
@@ -484,7 +486,9 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const activeStudentId = editingLog ? editingLog.student_id : addStudentId;
   const sGroupIds = groupMembers.filter(m => String(m.student_id) === String(activeStudentId)).map(m => m.group_id);
     
+  // 🔴 2. กรองคอร์สพิเศษให้แสดงคอร์สแบบ Custom (ไม่มีรหัสเด็ก/กลุ่ม) ด้วย
   const studentCustomCourses = customCoursesList.filter(course => {
+    if (!course.student_id && !course.group_id) return true;
     if (isAdding && isCurrentGroupMode) {
       return String(course.group_id) === String(groupId);
     }
@@ -501,15 +505,24 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl h-auto min-h-[60vh] max-h-[90vh] overflow-hidden flex flex-col">
         
-        <div className="bg-indigo-900 text-white p-6 flex justify-between items-center shrink-0">
+        {/* Header หลักของ Modal */}
+        <div className="bg-indigo-900 text-white p-5 flex justify-between items-center shrink-0">
           <h3 className="text-lg font-bold">
             {isAdding ? (isClassroomTutor ? 'บันทึกการเช่าสถานที่ใหม่' : 'เพิ่มประวัติการสอนใหม่') : 
              editingLog ? 'แก้ไขประวัติ' : 
-             (isClassroomTutor ? 'ประวัติการใช้งานสถานที่' : `ประวัติการสอน: ${tutor.name || tutor.username}`)}
+             (isClassroomTutor ? 'ประวัติการใช้งานสถานที่' : 'จัดการประวัติการสอน')}
           </h3>
           <button onClick={onClose} className="text-indigo-200 hover:text-white transition">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
+        </div>
+
+        {/* 🔴 3. แถบป้ายชื่อครู (Banner) แจ้งให้แอดมินทราบว่ากำลังทำงานในฐานะครูคนไหน */}
+        <div className="bg-amber-100 border-b border-amber-200 px-6 py-2 flex items-center shrink-0 shadow-sm">
+           <svg className="w-5 h-5 text-amber-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+           <span className="text-sm font-semibold text-amber-900">
+              กำลังจัดการประวัติของครู/สถานที่: <span className="font-bold underline decoration-amber-400 underline-offset-4 ml-1">{tutor.name || tutor.username}</span> 
+           </span>
         </div>
         
         <div className="p-8 overflow-y-auto flex-1">
@@ -531,7 +544,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                 </div>
               )}
 
-              {/* 🔴 4. เพิ่ม Sub-Toggle ตรงนี้สำหรับการสลับเป้าหมายโหมดต่อเนื่อง */}
               {isAdding && logType === 'bulk' && !isClassroomTutor && (
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between animate-fadeIn">
                   <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">ประเภทเป้าหมายต่อเนื่อง :</span>
@@ -616,7 +628,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                 </div>
               )}
 
-              {/* ซ่อนปุ่มเลือกรูปแบบหากเป็น Classroom */}
               {!isClassroomTutor && (!isAdding || isTargetSelected) && (
                 <div>
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">รูปแบบคลาสเรียน</label>
@@ -655,7 +666,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                   </div>
               )}
 
-              {/* ส่วนตารางลงเวลา */}
               {(!isAdding || isTargetSelected) && logType !== 'bulk' ? (
                 <div className="space-y-4 pt-2 border-t border-dashed">
                   <div>

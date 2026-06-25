@@ -33,54 +33,73 @@ export default function Login() {
     setLoading(true);
     setError('');
 
-    // ข้อความแจ้งเตือนความปลอดภัยแบบส่วนกลางเพื่อป้องกันการสุ่มหาชื่อบัญชี
     const GENERIC_ERROR = 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง';
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('email, role')
-      .eq('username', username)
-      .single();
+    try {
+      // 1. ค้นหาข้อมูลผู้ใช้จากตาราง users ก่อน
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
 
-    if (userError || !userData) {
-      setError(GENERIC_ERROR);
+      if (userError || !userData) {
+        setError(GENERIC_ERROR);
+        setLoading(false);
+        return;
+      }
+
+      // 🔴 2. แยกระบบล็อกอิน (สำหรับเด็ก และ ผู้ปกครอง ใช้รหัสผ่านธรรมดา)
+      if (userData.role === 'student' || userData.role === 'parent') {
+        if (userData.password !== password) {
+          setError(GENERIC_ERROR);
+          setLoading(false);
+          return;
+        }
+        
+        // จำลอง Session ไว้ในเครื่อง (เพื่อให้หน้าอื่นๆ รู้ว่าใครล็อกอินอยู่)
+        localStorage.setItem('custom_user_session', JSON.stringify(userData));
+        
+        // พานำทางไปหน้า Dashboard ของแต่ละคน
+        navigate(`/${userData.role}`);
+        setLoading(false);
+        return;
+      }
+
+      // 🔴 3. แยกระบบล็อกอิน (สำหรับ Admin และ Tutor ยังคงใช้ความปลอดภัยสูงสุดของ Supabase Auth)
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: userData.email,
+        password: password,
+      });
+
+      if (authError) {
+        setError(GENERIC_ERROR);
+        setLoading(false);
+        return;
+      }
+
+      if (userData.role === 'admin') {
+        navigate('/admin');
+      } else if (userData.role === 'tutor') {
+        navigate('/tutor');
+      } else {
+        setError('สิทธิ์การใช้งานไม่ถูกต้อง');
+      }
+
+    } catch (err) {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: userData.email,
-      password,
-    });
-
-    if (authError) {
-      setError(GENERIC_ERROR);
-      setLoading(false);
-      return;
-    }
-
-    if (userData.role === 'admin') {
-      navigate('/admin');
-    } else if (userData.role === 'tutor') {
-      navigate('/tutor');
-    } else if (userData.role === 'student') {
-      navigate('/student');
-    } else {
-      setError('สิทธิ์การใช้งานไม่ถูกต้อง');
-    }
-
-    setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
-      {/* เอฟเฟกต์แสงไฟเรืองรองด้านหลังฟอร์ม */}
       <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-md backdrop-blur-md z-10 transition-all duration-300">
         
-        {/* 🔴 ส่วนที่ปรับปรุง: นำ logo.svg มาจัดวางพร้อมแต่งกรอบให้ดูพรีเมียมเข้ากับธีมมืด */}
         <div className="flex flex-col items-center mb-8">
           <img 
             src="/logo.svg" 

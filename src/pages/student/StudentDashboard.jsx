@@ -29,13 +29,30 @@ export default function StudentDashboard() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    // 🔴 เพิ่มการล้างค่า Session จำลองของเด็กและผู้ปกครอง
+    localStorage.removeItem('custom_user_session');
     window.location.href = '/login';
   };
 
   useEffect(() => {
     const fetchInitialData = async () => {
+      // 1. ลองดึงจาก Supabase ก่อน (เผื่อกรณีแอดมินจำลองสิทธิ์เข้ามา)
       const { data: { session } } = await supabase.auth.getSession();
       let currentUser = session?.user;
+      
+      // 🔴 2. ถ้าไม่เจอใน Supabase ให้ไปดึงจาก localStorage แทน (สำหรับเด็กที่ล็อกอินแบบใหม่)
+      if (!currentUser) {
+        const localSession = localStorage.getItem('custom_user_session');
+        if (localSession) {
+          currentUser = JSON.parse(localSession);
+        }
+      }
+
+      // ถ้าไม่มีข้อมูลใครล็อกอินเลย ให้เด้งกลับหน้า Login
+      if (!currentUser) {
+        window.location.href = '/login';
+        return;
+      }
       
       if (currentUser) {
         const { data: profile } = await supabase
@@ -61,15 +78,21 @@ export default function StudentDashboard() {
     fetchInitialData();
   }, []);
 
+  // ปรับแก้ useEffect ตัวนี้ครับ
   useEffect(() => {
+    // 🔴 เพิ่มเงื่อนไขเช็ค sessionUser.id ให้แน่ชัด
     if (!sessionUser?.id || !selectedMonth) return;
 
     const fetchMyLogs = async () => {
       setLoading(true);
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
+      // คำนวณวันสิ้นเดือนแบบแม่นยำ
       const lastDay = new Date(Number(year), Number(month), 0).getDate();
       const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+      // 🔴 เพิ่ม console.log ไว้เช็คว่า query ส่งค่าไปถูกต้องไหม
+      console.log('Fetching logs for:', sessionUser.id, startDate, endDate);
 
       const { data, error } = await supabase
         .from('teaching_logs')
@@ -80,14 +103,16 @@ export default function StudentDashboard() {
         .order('teaching_date', { ascending: true })
         .order('start_time', { ascending: true });
 
-      if (!error && data) {
-        setLogs(data);
+      if (error) {
+        console.error('Error fetching logs:', error);
+      } else {
+        setLogs(data || []);
       }
       setLoading(false);
     };
 
     fetchMyLogs();
-  }, [sessionUser?.id, selectedMonth]);
+  }, [sessionUser?.id, selectedMonth]); // ตรวจสอบการเปลี่ยนแปลงของ ID User
 
   const { totalHrs, totalAmt, logsWithCalculation } = useMemo(() => {
     let tHrs = 0;
@@ -173,7 +198,6 @@ export default function StudentDashboard() {
       
       <div className="bg-gradient-to-r from-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center space-x-5">
-          {/* 🔴 ปรับขนาดโลโก้ให้ใหญ่ขึ้นและดูพรีเมียมขึ้น */}
           <img 
             src="/logo.svg" 
             alt="PUN-IQ Logo" 

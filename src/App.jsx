@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-// 🔴 1. นำเข้า useRef เพิ่มเติมเพื่อใช้เป็นหน่วยความจำ
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 
@@ -8,6 +7,7 @@ import ResetPassword from './pages/auth/ResetPassword';
 import AdminLayout from './pages/admin/AdminLayout'; 
 import TutorLayout from './pages/tutor/TutorLayout';
 import StudentDashboard from './pages/student/StudentDashboard';
+import ParentLayout from './pages/parent/ParentLayout';
 
 const NotFound = () => <div className="p-10 text-xl font-bold text-gray-500">404 - ไม่พบหน้านี้</div>;
 
@@ -17,7 +17,6 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const [userRole, setUserRole] = useState(null);
   const [authenticated, setAuthenticated] = useState(false);
   
-  // 🔴 2. สร้างตัวแปรจำ ID ผู้ใช้ เพื่อกันการโหลดซ้ำซ้อน
   const currentUserId = useRef(null);
 
   useEffect(() => {
@@ -25,24 +24,31 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
     // 1. ตรวจสอบสิทธิ์ทันทีที่โหลดหน้า
     const checkAuth = async () => {
+      // ค้นหาบัตรจาก 2 แหล่ง: Supabase (แอดมิน/ครู) และ LocalStorage (เด็ก/ผู้ปกครอง)
       const { data: { session } } = await supabase.auth.getSession();
+      const localSessionStr = localStorage.getItem('custom_user_session');
+      const localSession = localSessionStr ? JSON.parse(localSessionStr) : null;
+
       if (isMounted) {
-        await handleSession(session);
+        await handleSession(session, localSession);
         setLoading(false);
       }
     };
     checkAuth();
 
-    // 2. ดักฟังการเปลี่ยนแปลง (เช่น โดนเตะออก หรือหมดเวลา)
+    // 2. ดักฟังการเปลี่ยนแปลงของ Supabase (จะมีผลแค่กับ แอดมิน/ครู)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // ถ้าเป็นเด็กหรือผู้ปกครองล็อกอินอยู่ ไม่ต้องสนใจ Event ของ Supabase
+        if (localStorage.getItem('custom_user_session')) return;
+
         if (event === 'SIGNED_OUT' || !session) {
           setAuthenticated(false);
           setUserRole(null);
-          currentUserId.current = null; // ล้างความจำเมื่อออกจากระบบ
+          currentUserId.current = null;
           setLoading(false);
         } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-          await handleSession(session);
+          await handleSession(session, null);
         }
       }
     );
@@ -53,37 +59,54 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     };
   }, []);
 
-  // เพิ่มกลไกตรวจสอบ Role ซ้ำทุกๆ 5 นาที ป้องกันการค้าง Session เมื่อแอดมินเปลี่ยนสิทธิ์
+  // 3. ตรวจสอบ Role ซ้ำทุกๆ 5 นาที (รองรับทั้ง 2 ระบบ)
   useEffect(() => {
     const interval = setInterval(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const localSessionStr = localStorage.getItem('custom_user_session');
+      let currentId = null;
+      let isSupabase = false;
+
+      if (localSessionStr) {
+        currentId = JSON.parse(localSessionStr).id;
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          currentId = session.user.id;
+          isSupabase = true;
+        }
+      }
+
+      if (!currentId) return;
       
       const { data: userData } = await supabase
-        .from('users').select('role').eq('id', session.user.id).single();
+        .from('users').select('role').eq('id', currentId).single();
       
+      // ถ้าโดนลบบัญชีทิ้ง ให้เตะออก
       if (!userData) {
-        await supabase.auth.signOut();
+        if (isSupabase) await supabase.auth.signOut();
+        else localStorage.removeItem('custom_user_session');
         window.location.href = '/login';
         return;
       }
       
+      // ถ้าสิทธิ์เปลี่ยน ให้พากลับไปหน้าที่ถูก
       if (allowedRole && userData.role !== allowedRole) {
-        // ถ้าระหว่างใช้งานอยู่โดนเปลี่ยน Role ให้เตะกลับไปหน้าที่ถูกต้องทันที
         window.location.href = userData.role === 'admin' 
           ? '/admin' 
           : userData.role === 'tutor' 
             ? '/tutor' 
-            : '/student';
+            : userData.role === 'parent'
+              ? '/parent'
+              : '/student';
       }
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, [allowedRole]);
 
-  // 🔴 3. ปรับปรุง handleSession ให้เช็คความจำก่อนดึงข้อมูล DB เสมอ
-  const handleSession = async (session) => {
-    if (!session) {
+  // 🔴 4. ปรับปรุงการตรวจสอบบัตร (รับพารามิเตอร์ 2 ตัว)
+  const handleSession = async (session, localSession) => {
+    if (!session && !localSession) {
       setAuthenticated(false);
       setUserRole(null);
       currentUserId.current = null;
@@ -91,18 +114,23 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     }
     
     setAuthenticated(true);
-    
-    // 🔴 Guard Clause: ถ้ารู้จัก User คนนี้แล้ว ให้ข้ามการดึง Database ไปเลย!
-    if (currentUserId.current === session.user.id) {
+
+    // กรณี: เด็ก หรือ ผู้ปกครอง (LocalStorage)
+    if (localSession) {
+      if (currentUserId.current === localSession.id) return;
+      setUserRole(localSession.role);
+      currentUserId.current = localSession.id;
       return;
     }
+
+    // กรณี: แอดมิน หรือ ครู (Supabase)
+    if (currentUserId.current === session.user.id) return;
 
     try {
       const { data: userData, error } = await supabase
         .from('users').select('role').eq('id', session.user.id).single();
       
       if (error || !userData) {
-        console.error('Failed to fetch user role:', error);
         await supabase.auth.signOut();
         setAuthenticated(false);
         setUserRole(null);
@@ -111,9 +139,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
       }
       
       setUserRole(userData.role);
-      currentUserId.current = session.user.id; // บันทึกความจำไว้ว่าโหลด Role คนนี้เสร็จแล้ว
+      currentUserId.current = session.user.id;
     } catch (err) {
-      console.error('Session validation error:', err);
       await supabase.auth.signOut();
       setAuthenticated(false);
       currentUserId.current = null;
@@ -122,9 +149,16 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...</div>;
   if (!authenticated) return <Navigate to="/login" replace />;
+  
   if (allowedRole && userRole !== allowedRole) {
-     return <Navigate to={userRole === 'admin' ? '/admin/dashboard' : userRole === 'tutor' ? '/tutor/timelog' : '/student'} replace />;
+     return <Navigate to={
+       userRole === 'admin' ? '/admin/dashboard' : 
+       userRole === 'tutor' ? '/tutor/timelog' : 
+       userRole === 'parent' ? '/parent' : 
+       '/student'
+     } replace />;
   }
+  
   return children;
 }
 
@@ -165,6 +199,16 @@ function App() {
               <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
                 <StudentDashboard />
               </div>
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* โซนผู้ปกครอง (แก้ให้มี /* ตามหลังเพื่อเรียก Layout ที่มีเมนู) */}
+        <Route 
+          path="/parent/*" 
+          element={
+            <ProtectedRoute allowedRole="parent">
+               <ParentLayout />
             </ProtectedRoute>
           } 
         />

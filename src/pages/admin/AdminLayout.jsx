@@ -10,7 +10,9 @@ import ManageSubject from './tabs/ManageSubject';
 import ManageCustomCourse from './tabs/ManageCustomCourse';
 import ManageCompanyAccount from './tabs/ManageCompanyAccount';
 import Billing from './tabs/Billing';
-import ReserveRoom from './tabs/ReserveRoom'; // 🔴 1. Import หน้า Reserve Room
+import ReserveRoom from './tabs/ReserveRoom'; 
+import ManageParent from './tabs/ManageParent';
+import ManageParentChildren from './tabs/ManageParentChildren'; 
 
 export default function AdminLayout() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -22,13 +24,15 @@ export default function AdminLayout() {
       case 'tutors': return <ManageTutor />;
       case 'students': return <ManageStudent />;
       case 'groups': return <ManageGroup />;
+      case 'parents': return <ManageParent />;
+      case 'parents-mapping': return <ManageParentChildren />; 
       case 'courses': return <ManageCourse />;
       case 'prices': return <ManagePrice />;
       case 'subjects': return <ManageSubject />;
       case 'custom-courses': return <ManageCustomCourse />;
       case 'company': return <ManageCompanyAccount />;
       case 'billing': return <Billing />;
-      case 'reserve-room': return <ReserveRoom />; // 🔴 2. เพิ่ม Case สำหรับเมนูเช่าห้อง
+      case 'reserve-room': return <ReserveRoom />; 
       default: return <Dashboard />;
     }
   };
