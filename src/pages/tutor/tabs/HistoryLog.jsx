@@ -7,16 +7,20 @@ export default function HistoryLog() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // 🔴 1. เพิ่ม State เก็บสถานะว่าเป็น Classroom หรือไม่
   const [isClassroomTutor, setIsClassroomTutor] = useState(false);
   const navigate = useNavigate();
+
+  // 🔴 1. เพิ่ม State เก็บค่าเดือน (ค่าเริ่มต้นคือเดือนปัจจุบัน)
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   const handleEditClick = (log) => {
     navigate('/tutor/edit-log', { state: { log } });
   };
 
   const handleDeleteClick = async (logId, date, studentName) => {
-    // 🔴 2. ปรับข้อความยืนยันการลบให้เข้ากับบริบท
     const confirmDelete = window.confirm(
       isClassroomTutor
         ? `⚠️ ยืนยันการลบประวัติการใช้งานสถานที่?\n\nคุณต้องการลบ Log วันที่ ${new Date(date).toLocaleDateString('th-TH')} ของผู้เช่า "${studentName}" ใช่หรือไม่? \n(การกระทำนี้ไม่สามารถย้อนกลับได้)`
@@ -41,12 +45,13 @@ export default function HistoryLog() {
   };
 
   const fetchLogs = async () => {
+    if (!selectedMonth) return;
+
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     const tutorId = session?.user?.id;
 
     if (tutorId) {
-      // 🔴 3. ตรวจสอบก่อนว่าคนที่ล็อกอินคือ Classroom หรือไม่
       const { data: userProfile } = await supabase
         .from('users')
         .select('username')
@@ -57,34 +62,59 @@ export default function HistoryLog() {
         setIsClassroomTutor(true);
       }
 
+      // 🔴 2. คำนวณวันแรกและวันสุดท้ายของเดือนที่เลือก
+      const [year, month] = selectedMonth.split('-');
+      const startDate = `${year}-${month}-01`;
+      const lastDay = new Date(Number(year), Number(month), 0).getDate();
+      const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
       const { data, error } = await supabase
         .from('teaching_logs')
         .select('*, users!teaching_logs_student_id_fkey(name, username), subjects(subject_name), custom_courses(course_name)')
         .eq('tutor_id', tutorId)
+        .gte('teaching_date', startDate) // 🔴 3. กรองตั้งแต่วันแรกของเดือน
+        .lte('teaching_date', endDate)   // 🔴 4. จนถึงวันสุดท้ายของเดือน
         .order('teaching_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (!error && data) setLogs(data);
+      if (!error && data) {
+        setLogs(data);
+      } else {
+        setLogs([]);
+      }
     }
     setLoading(false);
   };
 
+  // 🔴 5. เปลี่ยนมาเรียกใช้ fetchLogs เมื่อค่าเดือนถูกเปลี่ยน
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [selectedMonth]);
 
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-6">
-        {/* 🔴 4. ปรับข้อความส่วน Header */}
-        <h1 className="text-2xl font-bold text-gray-800">
-          {isClassroomTutor ? 'ประวัติการใช้งานสถานที่' : 'ประวัติการสอน'}
-        </h1>
-        <p className="text-gray-500 mt-1">
-          {isClassroomTutor ? 'ดูประวัติการใช้ห้องย้อนหลัง แก้ไข หรือลบข้อมูลการเช่าสถานที่' : 'ดูประวัติการลงเวลาย้อนหลัง แก้ไข หรือลบข้อมูลคลาสเรียน'}
-        </p>
+      {/* 🔴 6. จัดกลุ่ม Header ใหม่ให้ช่องเลือกเดือนอยู่ด้านขวา */}
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {isClassroomTutor ? 'ประวัติการใช้งานสถานที่' : 'ประวัติการสอน'}
+          </h1>
+          <p className="text-gray-500 mt-1">
+            {isClassroomTutor ? 'ดูประวัติการใช้ห้องย้อนหลัง แก้ไข หรือลบข้อมูลการเช่าสถานที่' : 'ดูประวัติการลงเวลาย้อนหลัง แก้ไข หรือลบข้อมูลคลาสเรียน'}
+          </p>
+        </div>
+        
+        <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center space-x-3 w-full md:w-auto">
+          <span className="text-sm font-bold text-gray-600 uppercase whitespace-nowrap">เลือกเดือน:</span>
+          <input 
+            type="month" 
+            value={selectedMonth} 
+            onChange={(e) => setSelectedMonth(e.target.value)} 
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto"
+          />
+        </div>
       </div>
 
       {error && (
@@ -99,8 +129,8 @@ export default function HistoryLog() {
             {isClassroomTutor ? 'กำลังโหลดประวัติการใช้งาน...' : 'กำลังโหลดประวัติการสอน...'}
           </div>
         ) : logs.length === 0 ? (
-          <div className="text-center py-10 text-gray-400">
-            {isClassroomTutor ? 'ยังไม่มีประวัติการใช้งานในระบบ' : 'ยังไม่มีประวัติการสอนในระบบ'}
+          <div className="text-center py-10 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+            {isClassroomTutor ? 'ยังไม่มีประวัติการใช้งานในเดือนที่เลือก' : 'ยังไม่มีประวัติการสอนในเดือนที่เลือก'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -109,7 +139,6 @@ export default function HistoryLog() {
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs uppercase tracking-wider">
                   <th className="p-3">วันที่</th>
                   <th className="p-3 text-center">เวลา</th>
-                  {/* 🔴 5. ปรับคำในหัวตาราง */}
                   <th className="p-3">{isClassroomTutor ? 'รายละเอียดแพ็กเกจ' : 'ประเภทคลาส / รายวิชา'}</th>
                   <th className="p-3">{isClassroomTutor ? 'ผู้เช่า (นักเรียน)' : 'นักเรียน'}</th>
                   <th className="p-3 text-center">{isClassroomTutor ? 'เวลา / รอบ' : 'ชม.'}</th>
@@ -120,7 +149,6 @@ export default function HistoryLog() {
                 {logs.map(log => {
                   const studentName = log.users?.name || log.users?.username || '-';
                   
-                  // ดึงตัวเลขการคำนวณรอบมาโชว์ใต้ชั่วโมง (ถ้าเป็น Classroom)
                   let roundsDisplay = null;
                   if (isClassroomTutor && log.custom_courses?.course_name) {
                      const match = log.custom_courses.course_name.match(/([\d.]+)\s*ชม\.\/รอบ/);

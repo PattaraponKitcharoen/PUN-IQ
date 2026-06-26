@@ -73,10 +73,10 @@ export default function ManageParent() {
           username: username.trim(),
           name: name.trim(),
           phone: phone.trim(),
-          email: email.trim(),
+          // 🔴 แก้ไข: ถ้าอีเมลว่างเปล่า ให้ส่งค่า null แทน ""
+          email: email.trim() || null,
         };
 
-        // ถ้ามีการพิมพ์รหัสผ่านใหม่ ให้ส่งไปอัปเดตด้วย (ระบบอาจจะต้องมี Edge Function หรือ Trigger จัดการ Auth)
         if (password.trim()) {
           payload.password = password.trim(); 
         }
@@ -88,10 +88,11 @@ export default function ManageParent() {
         // สร้างบัญชีผู้ปกครองใหม่
         const payload = {
           username: username.trim(),
-          password: password.trim(), // ในระบบจริง ควรเข้ารหัสหรือส่งผ่าน API สร้าง Auth
+          password: password.trim(), 
           name: name.trim(),
           phone: phone.trim(),
-          email: email.trim(),
+          // 🔴 แก้ไข: ถ้าอีเมลว่างเปล่า ให้ส่งค่า null แทน ""
+          email: email.trim() || null,
           role: 'parent'
         };
 
@@ -103,7 +104,14 @@ export default function ManageParent() {
       handleCancelEdit();
       fetchParents();
     } catch (error) {
-      setMessage(`❌ เกิดข้อผิดพลาด: ${error.message}`);
+      // 🔴 แอบดัก Error ให้แสดงข้อความภาษาไทยเข้าใจง่ายขึ้นด้วยครับ
+      if (error.message.includes('users_email_key')) {
+         setMessage('❌ ไม่สามารถสร้างได้: อีเมลนี้ถูกใช้งานซ้ำในระบบแล้ว');
+      } else if (error.message.includes('users_username_key')) {
+         setMessage('❌ ไม่สามารถสร้างได้: ชื่อผู้ใช้งาน (Username) นี้มีคนใช้แล้ว');
+      } else {
+         setMessage(`❌ เกิดข้อผิดพลาด: ${error.message}`);
+      }
     } finally {
       setSaving(false);
     }
