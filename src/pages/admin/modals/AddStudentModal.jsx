@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-export default function AddStudentModal({ isOpen, onClose, onSuccess }) {
+export default function AddStudentModal({ isOpen, onClose }) {
   const [name, setName] = useState(''); 
-  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState(''); // 🔴 เพิ่ม State เก็บพาสเวิร์ดแทนเมล
   const [phone, setPhone] = useState('');  
   const [grade, setGrade] = useState('');  
   const [loading, setLoading] = useState(false);
@@ -17,73 +15,61 @@ export default function AddStudentModal({ isOpen, onClose, onSuccess }) {
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      setError('❌ กรุณากรอกข้อมูลชื่อผู้ใช้งานและรหัสผ่านให้ครบถ้วน');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setMessage('');
 
-    // 🔴 ปรับปรุงความปลอดภัย (P4): ใช้ crypto เพื่อสร้างรหัสผ่านที่เดายากขึ้น
-    const tempPassword = crypto.randomUUID().slice(0, 12) + "Stu@1";
-
     try {
-      // 1. ดึง Token ของแอดมินที่กำลังล็อกอินอยู่ เพื่อส่งไปยืนยันตัวตนกับ Server
-      const { data: { session } } = await supabase.auth.getSession();
+      // 🔴 เปลี่ยนสถาปัตยกรรม: ยิงตรงเข้าตารางแบบเดียวกับ Parent และบังคับ email: null เพื่อไม่ให้ติดเงื่อนไข "" ซ้ำ
+      const payload = {
+        username: username.trim(),
+        password: password.trim(),
+        name: name.trim(),
+        phone: phone.trim(),
+        grade: grade.trim(),
+        email: null, // บังคับให้เป็นค่าว่างแบบสมบูรณ์ของ DB (แก้อาการ Null ซ้ำแล้วพัง)
+        role: 'student'
+      };
+
+      const { error: insertError } = await supabase.from('users').insert([payload]);
+      if (insertError) throw insertError;
+
+      setMessage('🎉 สร้างบัญชีนักเรียนใหม่สำเร็จเรียบร้อย!');
       
-      if (!session) throw new Error("ไม่พบเซสชันการล็อกอิน กรุณาล็อกอินใหม่");
-
-      // 2. เรียกใช้งาน Edge Function แทนการเขียนฐานข้อมูลตรงๆ จากหน้าเว็บ
-      const response = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          email: email, 
-          password: tempPassword,
-          name: name, 
-          username: username, 
-          role: 'student', 
-          phone: phone, 
-          grade: grade 
-        })
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'เกิดข้อผิดพลาดในการสร้างผู้ใช้');
-
-      // 3. ส่งอีเมลตั้งรหัสผ่าน (ใช้ supabase client ปกติเรียกได้เลย เพราะส่งหา email ปลายทาง)
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
-
-      if (resetError) {
-        setError(`สร้างบัญชีสำเร็จ แต่ส่งอีเมลไม่สำเร็จ: ${resetError.message}`);
-      } else {
-        setMessage(`ลงทะเบียนสำเร็จ! ส่งลิงก์ตั้งรหัสผ่านไปที่ ${email} แล้ว`);
-        setName(''); 
-        setEmail('');
-        setUsername('');
-        setPhone('');
-        setGrade('');
-        setTimeout(() => {
-          onSuccess();
-          onClose();
-          setMessage('');
-        }, 2000);
-      }
+      // ล้างค่าฟอร์มกลับเป็นค่าเริ่มต้น
+      setName('');
+      setUsername('');
+      setPassword('');
+      setPhone('');
+      setGrade('');
+      
+      setTimeout(() => {
+        onClose(); // เรียกหน้าต่างปิด และสั่งให้ ManageStudent รีเฟรชตารางข้อมูลอัตโนมัติ
+        setMessage('');
+      }, 1500);
       
     } catch (err) {
-      setError(`เกิดข้อผิดพลาด: ${err.message}`);
+      if (err.message.includes('users_username_key')) {
+        setError('❌ ไม่สามารถสร้างได้: ชื่อผู้ใช้งาน (Username) นี้มีในระบบอยู่แล้ว');
+      } else {
+        setError(`เกิดข้อผิดพลาด: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔴 สร้างฟังก์ชันล้างค่าก่อนปิดหน้าต่าง
   const handleClose = () => {
     setName('');
-    setEmail('');
     setUsername('');
+    setPassword('');
     setPhone('');
-    setGrade(''); // ถ้าเป็นหน้า AddTutor ให้ลบตัวนี้ทิ้งครับ
+    setGrade('');
     setError('');
     setMessage('');
     onClose();
@@ -94,7 +80,7 @@ export default function AddStudentModal({ isOpen, onClose, onSuccess }) {
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
         <div className="bg-slate-900 text-white p-5 flex justify-between items-center">
           <h3 className="text-lg font-bold">ลงทะเบียนนักเรียนใหม่</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition">
+          <button onClick={handleClose} className="text-slate-400 hover:text-white transition">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -115,9 +101,10 @@ export default function AddStudentModal({ isOpen, onClose, onSuccess }) {
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น student_jack" required />
           </div>
           
+          {/* 🔴 เปลี่ยนจากอินพุตอีเมลเดิม มาเป็นอินพุตรหัสผ่านตรงๆ */}
           <div>
-            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">อีเมลนักเรียน / ผู้ปกครอง</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น jack@gmail.com" required />
+            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">รหัสผ่านสำหรับเข้าใช้งาน (Password)</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="ตั้งรหัสผ่านสำหรับนักเรียน..." required />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -133,7 +120,7 @@ export default function AddStudentModal({ isOpen, onClose, onSuccess }) {
 
           <div className="flex space-x-3 pt-2">
             <button type="button" onClick={handleClose} className="w-1/2 bg-gray-100 text-gray-700 font-bold py-2 rounded-lg text-sm">ยกเลิก</button>
-            <button type="submit" disabled={loading} className="w-1/2 bg-blue-600 text-white font-bold py-2 rounded-lg text-sm">{loading ? 'กำลังประมวลผล...' : 'สร้างและส่งอีเมล'}</button>
+            <button type="submit" disabled={loading} className="w-1/2 bg-blue-600 text-white font-bold py-2 rounded-lg text-sm">{loading ? 'กำลังประมวลผล...' : 'บันทึกบัญชีนักเรียน'}</button>
           </div>
         </form>
       </div>

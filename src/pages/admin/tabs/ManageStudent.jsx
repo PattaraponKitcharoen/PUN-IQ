@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import AddStudentModal from '../modals/AddStudentModal';
 import EditStudentInfoModal from '../modals/EditStudentInfoModal';
-// 🔴 เปลี่ยนจาก ConfirmResetPasswordModal เป็น EditPasswordModal
 import EditPasswordModal from '../modals/EditPasswordModal'; 
 import ConfirmDeleteStudentModal from '../modals/ConfirmDeleteStudentModal';
 import EditStudentAccountModal from '../modals/EditStudentAccountModal';
@@ -20,7 +19,6 @@ export default function ManageStudent() {
   const [showEditAccountModal, setShowEditAccountModal] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState(null);
-
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,7 +34,8 @@ export default function ManageStudent() {
 
     let query = supabase
       .from('users')
-      .select('id, name, username, grade, phone, email, company_account_id', { count: 'exact' })
+      // 🔴 เอา email ออกจากจุด select query
+      .select('id, name, username, grade, phone, company_account_id', { count: 'exact' })
       .eq('role', 'student');
 
     const sanitizeSearch = (term) => {
@@ -134,7 +133,7 @@ export default function ManageStudent() {
                   </th>
                   <th className="p-4 font-semibold">ระดับชั้น</th>
                   <th className="p-4 font-semibold">เบอร์โทรศัพท์</th>
-                  <th className="p-4 font-semibold">อีเมล</th>
+                  {/* 🔴 เอาหัวตารางอีเมลออก */}
                   <th className="p-4 font-semibold text-center w-40">จัดการ</th>
                 </tr>
               </thead>
@@ -145,7 +144,7 @@ export default function ManageStudent() {
                     <td className="p-4 text-gray-600">{student.username}</td>
                     <td className="p-4 text-gray-700 font-semibold"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs">{student.grade || '-'}</span></td>
                     <td className="p-4 text-gray-600">{student.phone || '-'}</td>
-                    <td className="p-4 text-gray-600 text-sm">{student.email}</td>
+                    {/* 🔴 เอาช่องแสดงผลอีเมลเดิมออก */}
                     <td className="p-4 flex items-center justify-center space-x-2">
                       <button onClick={() => { setSelectedStudent(student); setShowEditInfoModal(true); }} title="แก้ไขข้อมูล" className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
@@ -177,7 +176,6 @@ export default function ManageStudent() {
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
                 disabled={currentPage === 1}
                 className="p-2 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-                title="หน้าก่อนหน้า"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
@@ -192,7 +190,6 @@ export default function ManageStudent() {
                 onClick={() => setCurrentPage(p => p + 1)} 
                 disabled={currentPage === totalPages}
                 className="p-2 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-                title="หน้าถัดไป"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
@@ -205,17 +202,9 @@ export default function ManageStudent() {
 
       <AddStudentModal isOpen={showAddModal} onClose={handleCloseAddModal} />
       <EditStudentInfoModal isOpen={showEditInfoModal} onClose={() => setShowEditInfoModal(false)} student={selectedStudent} onSuccess={fetchStudents} />
-      
-      {/* 🔴 เรียกใช้ Modal ใหม่ตรงนี้ โดยดัดแปลง Prop เล็กน้อย */}
       <EditPasswordModal isOpen={showEditPasswordModal} onClose={() => setShowEditPasswordModal(false)} user={selectedStudent} />
-      
       <EditStudentAccountModal isOpen={showEditAccountModal} onClose={() => setShowEditAccountModal(false)} student={selectedStudent} onSuccess={fetchStudents} />
-      <ConfirmDeleteStudentModal 
-        isOpen={showDeleteModal} 
-        onClose={() => setShowDeleteModal(false)} 
-        student={selectedStudent} 
-        onSuccess={fetchStudents} 
-      />
+      <ConfirmDeleteStudentModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} student={selectedStudent} onSuccess={fetchStudents} />
     </div>
   );
 }
