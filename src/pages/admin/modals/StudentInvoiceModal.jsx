@@ -20,7 +20,7 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        cacheBust: true, // 💡 บังคับเคลียร์แคชรูปภาพป้องกันบั๊กภาพไม่มา
+        cacheBust: true, 
         style: {
           overflow: 'visible',
           margin: '0',
@@ -31,19 +31,20 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
       
       // ถ่ายรูปรอบจริง
+      // 💡 ปรับ pixelRatio ให้แปรผันตามหน้าจอ iPad และปรับ quality ให้เป็น 1.0 (ชัดสุด)
+      const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
       const dataUrl = await toJpeg(node, { 
         ...captureOptions, 
-        quality: 0.95, 
-        pixelRatio: 2 
+        quality: 1.0, 
+        pixelRatio: scale 
       });
       
-      // 💡 ปรับปรุงให้รองรับเบราว์เซอร์ที่เข้มงวด (เช่น Safari บน Mac/iPhone)
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `Invoice_${student.username}_${billingMonth}.jpg`; 
-      document.body.appendChild(link); // ยัดลงเว็บชั่วคราว
+      document.body.appendChild(link); 
       link.click();
-      document.body.removeChild(link); // ลบทิ้งเมื่อทำงานเสร็จ
+      document.body.removeChild(link); 
     } catch (error) {
       console.error('Error saving image:', error);
       alert(`ไม่สามารถบันทึกภาพได้เนื่องจากติดสิทธิ์ความปลอดภัยรูปภาพ QR Code ควรรีเฟรชหน้าเว็บแล้วลองอีกครั้งครับ`);

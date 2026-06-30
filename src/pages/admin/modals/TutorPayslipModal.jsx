@@ -20,7 +20,7 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        cacheBust: true, // 🔴 เพิ่ม: ป้องกันแคชภาพค้าง
+        cacheBust: true, 
         style: {
           overflow: 'visible',
           margin: '0',
@@ -29,17 +29,18 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
 
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
       
+      // 💡 ปรับคุณภาพภาพให้คมชัดเพื่อรองรับการแสดงผลบน iPad
+      const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
       const dataUrl = await toJpeg(node, { 
         ...captureOptions, 
-        quality: 0.95, 
-        pixelRatio: 2 
+        quality: 1.0, 
+        pixelRatio: scale 
       });
       
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `Payslip_${tutor.username}_${billingMonth}.jpg`; 
       
-      // 🔴 เพิ่ม: ท่าไม้ตายรองรับเบราว์เซอร์ Mac / Safari
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
