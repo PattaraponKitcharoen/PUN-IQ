@@ -70,10 +70,14 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
         <div className="mb-2">
           <h2 className="text-xs font-bold text-[#1b4379] mb-0.5">ข้อมูลนักเรียน</h2>
           <div className="w-full h-px bg-[#dcebf8] mb-1"></div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-            <p><span className="text-gray-600 inline-block w-16">ชื่อผู้เรียน</span> <span className="font-semibold">{student.name || student.username}</span></p>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 items-center">
+            {/* 🔴 ปรับโค้ดบรรทัดนี้ ให้ชื่อเด็กมีไฮไลต์สีฟ้าธีมเดียวกับบิล */}
+            <p className="flex items-center">
+              <span className="text-gray-600 w-16 shrink-0">ชื่อผู้เรียน</span> 
+              <span className="font-semibold bg-[#dcebf8] px-2 py-0.5 rounded-full text-[#1b4379] truncate">{student.name || student.username}</span>
+            </p>
             <p className="text-right"><span className="text-gray-600 mr-2">ระดับชั้น</span> <span className="font-semibold">{student.grade || '-'}</span></p>
-            <p><span className="text-gray-600 inline-block w-16">วันที่</span> <span className="font-semibold">{issueDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'numeric', year: 'numeric' })}</span></p>
+            <p className="flex items-center"><span className="text-gray-600 w-16 shrink-0">วันที่</span> <span className="font-semibold">{issueDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'numeric', year: 'numeric' })}</span></p>
             <p className="text-right"><span className="text-gray-600 mr-2">ประจำเดือน</span> <span className="font-semibold">{new Date(billingMonth + '-01').toLocaleDateString('th-TH', { month: 'long', year: '2-digit' })}</span></p>
           </div>
         </div>
@@ -226,7 +230,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
         </div>
 
         <p className="text-center text-[10px] text-gray-500 font-bold mt-2">
-          ขอบคุณที่ไว้วางใจ Pun-IQ Academy / ปั้นความรู้ ปั้นอนาคต
+          ขอบคุณที่ไว้วางใจ Pun-IQ Academy / ปันความรู้ ปั้นอนาคต
         </p>
       </div>
 
