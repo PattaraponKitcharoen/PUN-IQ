@@ -4,17 +4,14 @@ import { supabase } from '../../../lib/supabase';
 export default function EditStudentInfoModal({ isOpen, onClose, student, onSuccess }) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState(''); 
   const [grade, setGrade] = useState(''); 
-  // 🔴 1. เพิ่ม State สำหรับเก็บข้อมูลบัญชีธนาคาร
   const [companyAccountId, setCompanyAccountId] = useState('');
   const [companyAccounts, setCompanyAccounts] = useState([]);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 🔴 2. ดึงรายชื่อบัญชีธนาคาร (เฉพาะบัญชีที่ Active) มาทำเป็นตัวเลือก
   useEffect(() => {
     const fetchCompanyAccounts = async () => {
       const { data } = await supabase
@@ -34,10 +31,8 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
     if (student) {
       setName(student.name || '');
       setUsername(student.username || '');
-      setEmail(student.email || '');
       setPhone(student.phone || '');
       setGrade(student.grade || '');
-      // 🔴 3. เซ็ตค่าเริ่มต้นของบัญชีธนาคาร ถ้านักเรียนเคยมีข้อมูลผูกไว้แล้ว
       setCompanyAccountId(student.company_account_id || '');
       setError('');
     }
@@ -47,36 +42,41 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (!username.trim()) {
+      setError('กรุณากรอกชื่อผู้ใช้งาน (Username)');
+      return;
+    }
+
     setLoading(true);
     setError('');
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('กรุณาล็อกอินใหม่');
-  
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-user`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            targetUserId: student.id,
-            // 🔴 4. แนบ company_account_id ไปให้ Edge Function อัปเดตด้วย
-            email, name, username, phone, grade, company_account_id: companyAccountId
-          })
-        }
-      );
-  
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
+      // 🔴 เปลี่ยนเป็นการใช้ supabase.from('users').update() โดยตรง (ไม่ต้องง้อ Edge Function)
+      const payload = {
+        name: name.trim(),
+        username: username.trim(),
+        phone: phone.trim(),
+        grade: grade.trim(),
+        company_account_id: companyAccountId || null,
+        email: null // บังคับล้างค่าอีเมลเดิมทิ้งเป็น null ป้องกันปัญหา Duplicate Constraint
+      };
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update(payload)
+        .eq('id', student.id);
+
+      if (updateError) throw updateError;
   
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err.message);
+      // 🔴 ดักจับกรณีที่แอดมินเผลอตั้ง Username ซ้ำกับคนอื่นในระบบ
+      if (err.message.includes('users_username_key')) {
+        setError('❌ ไม่สามารถอัปเดตได้: ชื่อผู้ใช้งาน (Username) นี้มีคนใช้แล้ว');
+      } else {
+        setError(`เกิดข้อผิดพลาด: ${err.message}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -97,10 +97,7 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
         <form onSubmit={handleUpdate} className="p-6 space-y-4">
           {error && <div className="bg-red-100 text-red-700 p-3 rounded-lg text-sm break-words">{error}</div>}
 
-          <div>
-            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">อีเมล (Email)</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
-          </div>
+          {/* 🔴 เอาช่องอีเมลออกไปแล้ว */}
 
           <div>
             <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อ - นามสกุล</label>
@@ -123,7 +120,6 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
             </div>
           </div>
 
-          {/* 🔴 5. เพิ่ม Dropdown สำหรับเลือกบัญชีธนาคาร */}
           <div>
             <label className="block text-gray-700 text-xs font-bold uppercase mb-2">บัญชีรับชำระเงิน (สำหรับเด็กคนนี้)</label>
             <select 
