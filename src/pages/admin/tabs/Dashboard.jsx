@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function Dashboard() {
+  // 🔴 1. เพิ่ม State เก็บค่าเดือน (ค่าเริ่มต้นคือเดือนปัจจุบัน)
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalTutors: 0,
@@ -9,13 +15,12 @@ export default function Dashboard() {
     thisMonthHours: 0
   });
   
-  // 🔴 1. เพิ่ม state เก็บรวบรวมกำไรแยกประเภท
   const [financialStats, setFinancialStats] = useState({ 
     revenue: 0, 
     expense: 0, 
     profit: 0, 
     roomRevenue: 0,
-    teachingProfit: 0 // กำไรจากการสอนเพียวๆ
+    teachingProfit: 0 
   });
   const [breakdownData, setBreakdownData] = useState({ revenue: [], expense: [], roomRevenue: [] });
   const [activeModal, setActiveModal] = useState(null); 
@@ -28,19 +33,27 @@ export default function Dashboard() {
   const [hasMoreLogs, setHasMoreLogs] = useState(true);
   const ITEMS_PER_PAGE = 10;
 
+  // 🔴 2. ให้ดึงข้อมูลใหม่ทุกครั้งที่เดือนเปลี่ยน
   useEffect(() => {
-    fetchStats(); 
-  }, []);
+    if (selectedMonth) {
+      fetchStats(); 
+    }
+  }, [selectedMonth]);
 
   useEffect(() => {
-    fetchRecentLogs(currentPage); 
-  }, [currentPage]);
+    if (selectedMonth) {
+      fetchRecentLogs(currentPage); 
+    }
+  }, [currentPage, selectedMonth]);
 
   const fetchStats = async () => {
     setLoadingStats(true);
-    const today = new Date();
-    const startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-    const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+    
+    // 🔴 3. คำนวณวันแรกและวันสุดท้ายจาก selectedMonth
+    const [year, month] = selectedMonth.split('-');
+    const startDate = `${year}-${month}-01`;
+    const lastDay = new Date(Number(year), Number(month), 0).getDate();
+    const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
     
     const [
       { count: studentCount },
@@ -58,7 +71,7 @@ export default function Dashboard() {
     ]);
 
     let totalHours = 0;
-    let totalTeachingRev = 0; // ยอดเก็บเด็กเพียวๆ (ไม่รวมค่าห้อง)
+    let totalTeachingRev = 0; 
     let totalExp = 0;
     let totalRoomRental = 0; 
     let revMap = {};
@@ -83,8 +96,6 @@ export default function Dashboard() {
           
           const rev = rounds * roomRate; 
           totalRoomRental += rev;
-          // 🔴 2. เลิกเอาค่าเช่าห้องไปปนกับยอดสอนเด็ก
-          // totalRev += rev; (ลบบรรทัดนี้ทิ้ง)
 
           if (!roomMap[studentName]) roomMap[studentName] = 0;
           roomMap[studentName] += rev;
@@ -93,7 +104,7 @@ export default function Dashboard() {
           const exp = hrs * (Number(log.applied_tutor_rate) || 0);
 
           totalHours += hrs;
-          totalTeachingRev += rev; // เก็บยอดค่าสอนเพียวๆ
+          totalTeachingRev += rev; 
           totalExp += exp;
 
           if (!revMap[studentName]) revMap[studentName] = 0;
@@ -111,11 +122,11 @@ export default function Dashboard() {
     const roomArray = Object.keys(roomMap).map(name => ({ name, amount: roomMap[name] })).sort((a,b) => b.amount - a.amount);
 
     const teachingProfit = totalTeachingRev - totalExp;
-    const finalProfit = teachingProfit + totalRoomRental; // กำไรรวมทุกแผนก
+    const finalProfit = teachingProfit + totalRoomRental; 
 
     setBreakdownData({ revenue: revArray, expense: expArray, roomRevenue: roomArray });
     setFinancialStats({ 
-      revenue: totalTeachingRev, // ส่งไปแค่ยอดสอนอย่างเดียว
+      revenue: totalTeachingRev, 
       expense: totalExp, 
       teachingProfit: teachingProfit, 
       roomRevenue: totalRoomRental,
@@ -136,9 +147,17 @@ export default function Dashboard() {
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE; 
 
+    // 🔴 4. เพิ่มเงื่อนไขกรองเดือนสำหรับตารางด้วย
+    const [year, month] = selectedMonth.split('-');
+    const startDate = `${year}-${month}-01`;
+    const lastDay = new Date(Number(year), Number(month), 0).getDate();
+    const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
     const { data } = await supabase
       .from('teaching_logs')
       .select('*, users!teaching_logs_student_id_fkey(name, username), tutor:users!teaching_logs_tutor_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
+      .gte('teaching_date', startDate)
+      .lte('teaching_date', endDate)
       .order('teaching_date', { ascending: false })
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -184,7 +203,7 @@ export default function Dashboard() {
       case 'profit':
         return {
           title: 'สรุปกำไรสุทธิรวมบริษัท',
-          isProfit: true, // ตัวแปรคุมให้แสดงผลแบบพิเศษ
+          isProfit: true, 
           data: [
             { name: 'กำไรจากการสอน', amount: financialStats.teachingProfit },
             { name: 'รายได้จากการปล่อยเช่าสถานที่', amount: financialStats.roomRevenue }
@@ -206,9 +225,24 @@ export default function Dashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6 relative pb-10">
       
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">ภาพรวมระบบ (Dashboard)</h1>
-        <p className="text-gray-500 mt-1">ยินดีต้อนรับสู่ระบบจัดการ PUN-IQ Academy</p>
+      {/* 🔴 5. เพิ่ม UI สำหรับเลือกเดือนที่ส่วน Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">ภาพรวมระบบ (Dashboard)</h1>
+          <p className="text-gray-500 mt-1">ยินดีต้อนรับสู่ระบบจัดการ PUN-IQ Academy</p>
+        </div>
+        <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center space-x-3 w-full md:w-auto">
+          <span className="text-sm font-bold text-gray-600 uppercase whitespace-nowrap">สรุปยอดประจำเดือน:</span>
+          <input 
+            type="month" 
+            value={selectedMonth} 
+            onChange={(e) => {
+              setSelectedMonth(e.target.value);
+              setCurrentPage(1); // รีเซ็ตกลับไปหน้าที่ 1 เสมอเมื่อเปลี่ยนเดือน
+            }} 
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -270,7 +304,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 🔴 3. เปิดให้กล่อง Profit คลิกได้ */}
         <div 
           onClick={() => setActiveModal('profit')}
           className="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-xl border border-slate-700 shadow-sm flex items-center justify-between cursor-pointer hover:ring-2 hover:ring-slate-400 transition group"
@@ -288,7 +321,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
           <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-            <h2 className="font-bold text-gray-800">คลาสเรียนและการใช้สถานที่ล่าสุดที่มีการบันทึก</h2>
+            <h2 className="font-bold text-gray-800">รายการบันทึกของเดือนที่เลือก</h2>
           </div>
           
           <div className="overflow-x-auto flex-1 relative min-h-[300px]">
@@ -310,7 +343,7 @@ export default function Dashboard() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {recentLogs.length === 0 ? (
-                  <tr><td colSpan="6" className="p-6 text-center text-gray-400">ยังไม่มีการบันทึกเวลา</td></tr>
+                  <tr><td colSpan="6" className="p-6 text-center text-gray-400">ยังไม่มีการบันทึกเวลาในเดือนนี้</td></tr>
                 ) : (
                   recentLogs.map((log) => {
                     const isClassroom = log.tutor?.username === 'Classroom';
@@ -394,7 +427,7 @@ export default function Dashboard() {
             <div className={`p-5 border-b flex justify-between items-center text-white ${modalConfig.bgHeader}`}>
               <div>
                 <h3 className="font-bold text-lg">{modalConfig.title}</h3>
-                <p className="text-sm opacity-90 mt-0.5">ประจำเดือนนี้</p>
+                <p className="text-sm opacity-90 mt-0.5">ประจำเดือนที่เลือก</p>
               </div>
               <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-white/20 rounded-lg transition">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -413,7 +446,6 @@ export default function Dashboard() {
                   {modalConfig.data.map((item, index) => (
                     <tr key={index} className="hover:bg-gray-50 transition">
                       <td className="p-4 font-medium text-gray-800">
-                        {/* 🔴 เพิ่มไอคอนแยกประเภทรายได้ให้ Modal Profit */}
                         {modalConfig.isProfit && item.name.includes('เช่า') && '🏠 '}
                         {modalConfig.isProfit && item.name.includes('สอน') && '📚 '}
                         {item.name}
@@ -425,7 +457,7 @@ export default function Dashboard() {
                   ))}
                   {modalConfig.data.length === 0 && (
                     <tr>
-                      <td colSpan="2" className="p-8 text-center text-gray-400">ยังไม่มียอดเงินในเดือนนี้</td>
+                      <td colSpan="2" className="p-8 text-center text-gray-400">ยังไม่มียอดเงินในเดือนที่เลือก</td>
                     </tr>
                   )}
                 </tbody>
