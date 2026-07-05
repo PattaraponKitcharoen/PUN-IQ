@@ -11,12 +11,14 @@ export default function ParentBilling() {
 
   const [loading, setLoading] = useState(true);
   
-  // State สำหรับโยนให้ Modal
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [selectedStudentForInvoice, setSelectedStudentForInvoice] = useState(null);
   const [invoiceLogs, setInvoiceLogs] = useState([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
-  const [companyAccount, setCompanyAccount] = useState(null);
+  
+  // 🔴 1. แยก State บัญชีหลัก (Default) กับบัญชีที่จะโยนให้ Modal ออกจากกัน ป้องกันการเขียนทับ
+  const [defaultCompanyAccount, setDefaultCompanyAccount] = useState(null); 
+  const [modalCompanyAccount, setModalCompanyAccount] = useState(null);
 
   useEffect(() => {
     const fetchChildrenAndAccount = async () => {
@@ -35,7 +37,7 @@ export default function ParentBilling() {
       }
       
       if (accountRes.data && accountRes.data.length > 0) {
-          setCompanyAccount(accountRes.data[0]); // เก็บไว้เป็นค่าสำรอง
+          setDefaultCompanyAccount(accountRes.data[0]); // 🔴 เก็บไว้เป็นค่าสำรองเสมอ ห้ามแก้
       }
       setLoading(false);
     };
@@ -43,16 +45,14 @@ export default function ParentBilling() {
   }, []);
 
   const handleOpenInvoice = async (child) => {
-    // 🔴 1. เพิ่มการเช็คดักจับเดือนปัจจุบันตรงนี้
     const today = new Date();
     const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     
     if (selectedMonth === currentMonthStr) {
       window.alert('⏳ ยังไม่ถึงกำหนดชำระเงินของเดือนนี้\n\nระบบจะเปิดให้ออกบิลและดู QR Code ชำระเงินได้เมื่อสิ้นสุดเดือนครับ\n(กรุณาเลือกดูบิลของเดือนก่อนหน้า)');
-      return; // หยุดการทำงานทันที ไม่เปิด Modal
+      return; 
     }
 
-    // 2. ดึง Log ของเด็กคนนี้ในเดือนที่เลือกมาคำนวณ
     const [year, month] = selectedMonth.split('-');
     const startDate = `${year}-${month}-01`;
     const lastDay = new Date(Number(year), Number(month), 0).getDate();
@@ -90,8 +90,8 @@ export default function ParentBilling() {
       return { ...log, grade, ratePerHour, amount, roundsForDisplay };
     });
 
-    // 3. ถ้าเด็กมีบัญชีผูกไว้ ให้ใช้บัญชีนั้น ถ้าไม่มีใช้บัญชีกลาง
-    let activeAccount = companyAccount;
+    // 🔴 2. ดึงบัญชีเฉพาะของเด็กคนนี้ ถ้าไม่มีก็ดึงจาก defaultCompanyAccount
+    let activeAccount = defaultCompanyAccount;
     if (child.company_account_id) {
        const { data: accData } = await supabase.from('company_accounts').select('*').eq('id', child.company_account_id).single();
        if (accData) activeAccount = accData;
@@ -100,7 +100,9 @@ export default function ParentBilling() {
     setInvoiceLogs(computedLogs);
     setInvoiceTotal(tAmt);
     setSelectedStudentForInvoice(child);
-    setCompanyAccount(activeAccount);
+    
+    // 🔴 3. เซ็ตค่าบัญชีสำหรับ Modal เท่านั้น โดยไม่กระทบกับ defaultCompanyAccount
+    setModalCompanyAccount(activeAccount);
     setShowInvoiceModal(true);
   };
 
@@ -155,7 +157,7 @@ export default function ParentBilling() {
         logs={invoiceLogs}
         totalAmount={invoiceTotal}
         billingMonth={selectedMonth}
-        companyAccount={companyAccount} 
+        companyAccount={modalCompanyAccount} // 🔴 4. โยน modalCompanyAccount ให้ Modal แทน
       />
     </div>
   );

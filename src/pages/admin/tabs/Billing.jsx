@@ -48,7 +48,6 @@ export default function Billing() {
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      // 🔴 แก้ไข: เปลี่ยนมาใช้ setLoading(true) แทน เพื่อให้ใช้งานได้ถูกต้อง
       setLoading(true);
       
       try {
@@ -129,6 +128,17 @@ export default function Billing() {
     return list.find(u => u.id === selectedUserId);
   }, [selectedUserId, activeTab, tutors, students]);
 
+  // 🔴 1. เพิ่ม useEffect ดักจับเมื่อกดเลือกนักเรียน ให้สลับบัญชีใน Dropdown ตามข้อมูลเด็กคนนั้นทันที
+  useEffect(() => {
+    if (activeTab === 'student' && selectedUserDetails) {
+      if (selectedUserDetails.company_account_id) {
+        setSelectedAccountId(selectedUserDetails.company_account_id);
+      } else if (companyAccounts.length > 0) {
+        setSelectedAccountId(companyAccounts[0].id); // ถ้าไม่มีให้กลับไปใช้บัญชี Default
+      }
+    }
+  }, [selectedUserDetails, activeTab, companyAccounts]);
+
   const selectedAccountDetails = companyAccounts.find(acc => acc.id === selectedAccountId);
 
   const { totalHrs, totalAmt, logsWithCalculation, groupedLogs } = useMemo(() => {
@@ -141,7 +151,6 @@ export default function Billing() {
       const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
       const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
 
-      // 🔴 2. แปลงเวลาจริงเป็นรอบ เพื่อออกบิลให้ตรง
       let amount = 0;
       let roundsForDisplay = null;
       const isClassroom = (activeTab === 'student' && log.users?.username === 'Classroom') || (activeTab === 'tutor' && selectedUserDetails?.username === 'Classroom');
@@ -153,7 +162,7 @@ export default function Billing() {
         
         if (match) {
            rounds = Number(log.duration_hours) / Number(match[1]);
-           roundsForDisplay = rounds; // จำรอบไว้โชว์ในบิล
+           roundsForDisplay = rounds; 
         }
         amount = Math.round(rounds * ratePerHour * 100) / 100;
       } else {
@@ -163,7 +172,6 @@ export default function Billing() {
       tHrs += Number(log.duration_hours);
       tAmt += amount;
 
-      // แอบแนบ roundsForDisplay ไปกับ log เพื่อให้ไปโชว์ในตารางข้างล่างได้
       const processedLog = { ...log, grade, ratePerHour, amount, roundsForDisplay };
       computedLogs.push(processedLog);
 
@@ -538,7 +546,12 @@ export default function Billing() {
                   logs={userData.logs} 
                   totalAmount={userData.totalAmount} 
                   billingMonth={selectedMonth} 
-                  companyAccount={companyAccounts.find(acc => acc.id === selectedAccountId)}
+                  // 🔴 2. แก้ไขส่วนตอนโหลด ZIP (Batch) ให้ดึงบัญชีเฉพาะของเด็กแต่ละคน
+                  companyAccount={
+                    companyAccounts.find(acc => acc.id === userData.user.company_account_id) || 
+                    companyAccounts.find(acc => acc.id === selectedAccountId) || 
+                    companyAccounts[0]
+                  }
                 />
               )}
             </div>

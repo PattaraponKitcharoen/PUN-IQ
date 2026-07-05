@@ -37,32 +37,20 @@ export default function EditStudentAccountModal({ isOpen, onClose, student, onSu
     setError('');
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('กรุณาล็อกอินใหม่');
-  
-      // ส่งไปอัปเดตผ่าน Edge Function เหมือนเดิม แต่ส่งไปแค่ข้อมูลบัญชี
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-user`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            targetUserId: student.id,
-            company_account_id: companyAccountId
-          })
-        }
-      );
-  
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error);
+      // 🔴 ปรับปรุงใหม่: ยิงอัปเดตตรงเข้าตาราง users ได้เลย ไม่ต้องผ่าน Edge Function
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ 
+          company_account_id: companyAccountId || null // ถ้าไม่ได้เลือกบัญชี ให้เป็น null เพื่อใช้บัญชีเริ่มต้น
+        })
+        .eq('id', student.id);
+
+      if (updateError) throw updateError;
   
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(`เกิดข้อผิดพลาดในการบันทึก: ${err.message}`);
     } finally {
       setLoading(false);
     }
