@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import StudentInvoice from '../StudentInvoice';
-import { toJpeg } from 'html-to-image';
+// 🔴 1. เปลี่ยนมาใช้ html2canvas
+import html2canvas from 'html2canvas';
 
 export default function StudentInvoiceModal({ isOpen, onClose, student, logs, totalAmount, billingMonth, companyAccount }) {
   const invoiceRef = useRef(null);
@@ -14,36 +15,28 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
     
     setIsDownloading(true);
     try {
-      // 🔴 1. รอให้ State ของ React เรนเดอร์ Base64 ให้เสร็จก่อน
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // เผื่อเวลาเล็กน้อยให้รูปภาพ (Base64) เรนเดอร์ลงหน้าจอให้เสร็จก่อน
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      const captureOptions = {
+      // 🔴 2. ใช้ html2canvas ซึ่งวาดพิกเซลตรงๆ ไม่ติดบั๊ก Safari
+      const canvas = await html2canvas(node, {
+        scale: 2, // 💡 ล็อกไว้ที่ 2 เท่า เพื่อให้ชัดเจน และไม่ทำให้หน่วยความจำ (RAM) ของมือถือเต็มจนพัง
+        useCORS: true,
+        allowTaint: true,
         backgroundColor: '#ffffff',
-        width: node.scrollWidth,
-        height: node.scrollHeight,
-        style: { overflow: 'visible', margin: '0' }
-      };
-
-      // 🔴 2. ยิงล่อเป้า Safari ครั้งที่ 1
-      await toJpeg(node, { ...captureOptions, quality: 0.1 });
-      
-      // พักจังหวะให้ Safari เซ็ตตัว
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // 🔴 3. เซ็ตค่าขยายแค่ 2 เท่า เพื่อกัน Canvas Memory ฝั่งมือถือพัง (เกิน 2 เท่าบนจอเรติน่ามักจะพัง)
-      const dataUrl = await toJpeg(node, { 
-        ...captureOptions, 
-        quality: 1.0, 
-        pixelRatio: 2 
       });
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
       
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `Invoice_${student.username}_${billingMonth}.jpg`; 
+      document.body.appendChild(link); 
       link.click();
+      document.body.removeChild(link); 
     } catch (error) {
       console.error('Error saving image:', error);
-      alert(`ไม่สามารถบันทึกภาพได้: ${error.message}`);
+      alert(`เกิดข้อผิดพลาดในการบันทึกภาพ: ${error.message}`);
     } finally {
       setIsDownloading(false);
     }

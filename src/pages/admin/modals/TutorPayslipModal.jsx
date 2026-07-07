@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import TutorPayslip from '../TutorPayslip'; 
-import { toJpeg } from 'html-to-image'; 
+// 🔴 1. เปลี่ยนมาใช้ html2canvas
+import html2canvas from 'html2canvas';
 
 export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalAmount, billingMonth }) {
   const payslipRef = useRef(null);
@@ -14,28 +15,26 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
     
     setIsDownloading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      const captureOptions = {
+      // 🔴 2. ใช้ html2canvas แทน
+      const canvas = await html2canvas(node, {
+        scale: 2, // 💡 ล็อกไว้ที่ 2 เท่า เพื่อให้เซฟได้ชัวร์ๆ บนมือถือ
+        useCORS: true,
+        allowTaint: true,
         backgroundColor: '#ffffff',
-        width: node.scrollWidth,
-        height: node.scrollHeight,
-        style: { overflow: 'visible', margin: '0' }
-      };
-
-      await toJpeg(node, { ...captureOptions, quality: 0.1 });
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const dataUrl = await toJpeg(node, { 
-        ...captureOptions, 
-        quality: 1.0, 
-        pixelRatio: 2 
       });
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
       
       const link = document.createElement('a');
       link.href = dataUrl;
       link.download = `Payslip_${tutor.username}_${billingMonth}.jpg`; 
+      
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+
     } catch (error) {
       console.error('Error saving image:', error);
       alert(`เกิดข้อผิดพลาดในการบันทึกภาพ: ${error.message}`);

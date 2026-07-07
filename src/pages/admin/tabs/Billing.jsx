@@ -8,7 +8,8 @@ import { saveAs } from 'file-saver';
 
 import StudentInvoice from '../StudentInvoice';
 import TutorPayslip from '../TutorPayslip';
-import { toJpeg } from 'html-to-image';
+// 🔴 1. เปลี่ยนมาใช้ html2canvas สำหรับการทำไฟล์ ZIP
+import html2canvas from 'html2canvas';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState('tutor');
@@ -128,13 +129,12 @@ export default function Billing() {
     return list.find(u => u.id === selectedUserId);
   }, [selectedUserId, activeTab, tutors, students]);
 
-  // 🔴 1. เพิ่ม useEffect ดักจับเมื่อกดเลือกนักเรียน ให้สลับบัญชีใน Dropdown ตามข้อมูลเด็กคนนั้นทันที
   useEffect(() => {
     if (activeTab === 'student' && selectedUserDetails) {
       if (selectedUserDetails.company_account_id) {
         setSelectedAccountId(selectedUserDetails.company_account_id);
       } else if (companyAccounts.length > 0) {
-        setSelectedAccountId(companyAccounts[0].id); // ถ้าไม่มีให้กลับไปใช้บัญชี Default
+        setSelectedAccountId(companyAccounts[0].id); 
       }
     }
   }, [selectedUserDetails, activeTab, companyAccounts]);
@@ -267,16 +267,18 @@ export default function Billing() {
           const el = document.getElementById(`batch-slip-${userData.user.id}`);
           if (el) {
             try {
+              // พักให้ภาพเตรียมตัว
               await new Promise(resolve => setTimeout(resolve, 600));
 
-              await toJpeg(el, { quality: 0.1, backgroundColor: '#ffffff' });
-              
-              const dataUrl = await toJpeg(el, { 
-                quality: 0.95, 
-                backgroundColor: '#ffffff', 
-                pixelRatio: 2 
+              // 🔴 2. เปลี่ยนมาใช้ html2canvas สร้างรูปภาพเพื่อยัดลง ZIP
+              const canvas = await html2canvas(el, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff'
               });
               
+              const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
               const base64Data = dataUrl.split(',')[1];
               
               const prefix = activeTab === 'tutor' ? 'Payslip' : 'Invoice';
@@ -546,7 +548,6 @@ export default function Billing() {
                   logs={userData.logs} 
                   totalAmount={userData.totalAmount} 
                   billingMonth={selectedMonth} 
-                  // 🔴 2. แก้ไขส่วนตอนโหลด ZIP (Batch) ให้ดึงบัญชีเฉพาะของเด็กแต่ละคน
                   companyAccount={
                     companyAccounts.find(acc => acc.id === userData.user.company_account_id) || 
                     companyAccounts.find(acc => acc.id === selectedAccountId) || 
