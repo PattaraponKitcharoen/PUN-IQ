@@ -20,17 +20,16 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        cacheBust: true,
-        useCORS: true,      
-        allowTaint: true,   
-        style: { overflow: 'visible', margin: '0' }
+        useCORS: true,      // 🔴 เพิ่ม: ปลดล็อก CORS ให้ Safari
+        allowTaint: true,   // 🔴 เพิ่ม: อนุญาตให้อ่านภาพภายนอก
+        style: {
+          overflow: 'visible',
+          margin: '0',
+        }
       };
 
-      // 🔴 ท่าไม้ตาย Safari: กระชากแคชด้วยการสั่งถ่ายรูปซ้ำๆ 3 รอบ
-      for (let i = 0; i < 3; i++) {
-        await toJpeg(node, { ...captureOptions, quality: 0.1 });
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
+      await toJpeg(node, { ...captureOptions, quality: 0.1 });
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
       const dataUrl = await toJpeg(node, { 
@@ -49,7 +48,7 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
 
     } catch (error) {
       console.error('Error saving image:', error);
-      alert(`โหลดภาพไม่สำเร็จ: หากลองอีกครั้งแล้วไม่ได้ อาจต้องปลดล็อกสิทธิ์ CORS ในฐานข้อมูลครับ`);
+      alert(`เกิดข้อผิดพลาดในการบันทึกภาพ\nสาเหตุ: ${error.message || 'โครงสร้างสไตล์บางอย่างไม่รองรับ'}`);
     } finally {
       setIsDownloading(false);
     }
@@ -96,7 +95,7 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
             {isDownloading ? (
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <span>กำลังประมวลผลรูปภาพ (รอสักครู่)...</span>
+                <span>กำลังสร้างรูปภาพ...</span>
               </>
             ) : (
               <>
