@@ -8,8 +8,7 @@ import { saveAs } from 'file-saver';
 
 import StudentInvoice from '../StudentInvoice';
 import TutorPayslip from '../TutorPayslip';
-// 🔴 1. เปลี่ยนมาใช้ html2canvas สำหรับการทำไฟล์ ZIP
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState('tutor');
@@ -257,7 +256,7 @@ export default function Billing() {
   useEffect(() => {
     if (batchRenderData && batchRenderData.length > 0) {
       const generateImages = async () => {
-        await new Promise(resolve => setTimeout(resolve, 2500));
+        await new Promise(resolve => setTimeout(resolve, 3000)); // เผื่อเวลาให้ Base64 โหลดทุกบิล
         
         const zip = new JSZip();
         const folderName = activeTab === 'tutor' ? `Payslips_${selectedMonth}` : `Invoices_${selectedMonth}`;
@@ -267,22 +266,23 @@ export default function Billing() {
           const el = document.getElementById(`batch-slip-${userData.user.id}`);
           if (el) {
             try {
-              // พักให้ภาพเตรียมตัว
-              await new Promise(resolve => setTimeout(resolve, 600));
-
-              // 🔴 2. เปลี่ยนมาใช้ html2canvas สร้างรูปภาพเพื่อยัดลง ZIP
-              const canvas = await html2canvas(el, {
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                backgroundColor: '#ffffff'
-              });
+              const captureOptions = {
+                backgroundColor: '#ffffff',
+                pixelRatio: 2,
+                style: { overflow: 'visible', margin: '0' }
+              };
               
-              const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+              // 🔴 ถ่ายล่อ 1 ครั้ง (Warmup ให้ Safari)
+              await toPng(el, captureOptions);
+              await new Promise(resolve => setTimeout(resolve, 300));
+              
+              // 🔴 ถ่ายจริงเป็นไฟล์ PNG
+              const dataUrl = await toPng(el, captureOptions);
               const base64Data = dataUrl.split(',')[1];
               
               const prefix = activeTab === 'tutor' ? 'Payslip' : 'Invoice';
-              const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.jpg`;
+              // 🔴 เซฟนามสกุลเป็น png ลงใน zip
+              const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.png`;
               
               imgFolder.file(fileName, base64Data, { base64: true });
             } catch (e) {
