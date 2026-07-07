@@ -14,22 +14,40 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
     
     setIsDownloading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // 🔴 เพิ่ม: บังคับโหลดภาพให้ครบด้วย Promise
+      const images = Array.from(node.querySelectorAll('img, div')).filter(el => 
+        window.getComputedStyle(el).backgroundImage !== 'none' || el.tagName === 'IMG'
+      );
+      
+      await Promise.all(images.map(img => {
+        return new Promise((resolve) => {
+          if (img.tagName === 'IMG' && !img.complete) {
+            img.onload = resolve;
+            img.onerror = resolve;
+          } else {
+            resolve();
+          }
+        });
+      }));
+
+      // พักจังหวะให้ Safari เตรียมทรัพยากร
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const captureOptions = {
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        useCORS: true,      // 🔴 เพิ่ม: ปลดล็อก CORS ให้ Safari
-        allowTaint: true,   // 🔴 เพิ่ม: อนุญาตให้อ่านภาพภายนอก
-        style: {
-          overflow: 'visible',
-          margin: '0',
+        style: { overflow: 'visible', margin: '0' },
+        cacheBust: true, // รอบนี้เปิดไว้เพื่อให้ Safari อัปเดตไฟล์ใหม่
+        filter: (node) => {
+            // บังคับให้ตัดเงาหรือ filter แปลกๆ ออก เพื่อป้องกัน Safari แบน
+            return true;
         }
       };
 
+      // 🔴 เพิ่มรอบถ่ายล่อ (Safari ต้องการรอบแรกเพื่อตื่น รอบสองเพื่อวาด)
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
       const dataUrl = await toJpeg(node, { 
@@ -46,7 +64,7 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
       document.body.removeChild(link); 
     } catch (error) {
       console.error('Error saving image:', error);
-      alert(`ไม่สามารถบันทึกภาพได้เนื่องจากติดสิทธิ์ความปลอดภัยรูปภาพ QR Code ควรรีเฟรชหน้าเว็บแล้วลองอีกครั้งครับ`);
+      alert(`ไม่สามารถบันทึกภาพได้: ${error.message}`);
     } finally {
       setIsDownloading(false);
     }
