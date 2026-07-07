@@ -1,9 +1,37 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, issueDate = new Date() }) {
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
   
+  // 🔴 1. เพิ่ม State เก็บรูปภาพแบบ Base64 (แก้บั๊ก Safari)
+  const [logoDataUrl, setLogoDataUrl] = useState('/logo.png');
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+
+  // 🔴 2. แปลงภาพเป็น Base64
+  useEffect(() => {
+    const convertImageToBase64 = async (url, setBase64) => {
+      if (!url) return;
+      try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => setBase64(reader.result);
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error('Failed to convert image:', error);
+        setBase64(url); // Fallback
+      }
+    };
+
+    convertImageToBase64('/logo.png', setLogoDataUrl);
+    if (tutor?.qr_code_url) {
+      convertImageToBase64(tutor.qr_code_url, setQrDataUrl);
+    } else {
+      setQrDataUrl(null);
+    }
+  }, [tutor?.qr_code_url]);
+
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(i => i !== groupId) : [...prev, groupId]);
   };
@@ -48,11 +76,10 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
+          {/* 🔴 3. เปลี่ยน src เป็น Base64 */}
           <img 
-            src="/logo.png" 
+            src={logoDataUrl} 
             alt="PUN-IQ Academy" 
-            crossOrigin="anonymous" // 💡 เพิ่มเติม
-            loading="eager"         // 💡 บังคับโหลดทันที
             className="h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
@@ -202,12 +229,11 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
               </p>
             </div>
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
-               {tutor.qr_code_url ? (
+               {qrDataUrl ? (
+                  /* 🔴 4. เปลี่ยน src เป็น Base64 */
                   <img 
-                    src={tutor.qr_code_url} 
+                    src={qrDataUrl} 
                     alt="Tutor QR Code" 
-                    crossOrigin="anonymous" // 💡 เพิ่มเติม
-                    loading="eager"         // 💡 บังคับโหลดทันที
                     className="w-full h-full object-contain" 
                   />
                ) : (

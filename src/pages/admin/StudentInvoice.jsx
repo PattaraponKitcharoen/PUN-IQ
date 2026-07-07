@@ -1,9 +1,37 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 export default function StudentInvoice({ student, logs, totalAmount, billingMonth, issueDate = new Date(), companyAccount }) {
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
   
+  // 🔴 1. เพิ่ม State เก็บรูปภาพแบบ Base64 (แก้บั๊ก Safari)
+  const [logoDataUrl, setLogoDataUrl] = useState('/logo.png');
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+
+  // 🔴 2. ฟังก์ชันโหลดภาพมาแปลงเป็น Base64 ตอนเปิดบิล
+  useEffect(() => {
+    const convertImageToBase64 = async (url, setBase64) => {
+      if (!url) return;
+      try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => setBase64(reader.result);
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error('Failed to convert image:', error);
+        setBase64(url); // ถ้าแปลงไม่สำเร็จให้ใช้ URL เดิม
+      }
+    };
+
+    convertImageToBase64('/logo.png', setLogoDataUrl);
+    if (companyAccount?.qr_code_url) {
+      convertImageToBase64(companyAccount.qr_code_url, setQrDataUrl);
+    } else {
+      setQrDataUrl(null);
+    }
+  }, [companyAccount?.qr_code_url]);
+
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(i => i !== groupId) : [...prev, groupId]);
   };
@@ -48,11 +76,10 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
+          {/* 🔴 3. เปลี่ยน src เป็น Base64 */}
           <img 
-            src="/logo.png" 
+            src={logoDataUrl} 
             alt="PUN-IQ Academy" 
-            crossOrigin="anonymous"
-            loading="eager" // 💡 บังคับโหลดทันที
             className="h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
@@ -71,7 +98,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
           <h2 className="text-xs font-bold text-[#1b4379] mb-0.5">ข้อมูลนักเรียน</h2>
           <div className="w-full h-px bg-[#dcebf8] mb-1"></div>
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 items-center">
-            {/* 🔴 ปรับโค้ดบรรทัดนี้ ให้ชื่อเด็กมีไฮไลต์สีฟ้าธีมเดียวกับบิล */}
             <p className="flex items-center">
               <span className="text-gray-600 w-16 shrink-0">ชื่อผู้เรียน</span> 
               <span className="font-semibold bg-[#dcebf8] px-2 py-0.5 rounded-full text-[#1b4379] truncate">{student.name || student.username}</span>
@@ -214,12 +240,11 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
               </p>
             </div>
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
-               {companyAccount?.qr_code_url ? (
+               {qrDataUrl ? (
+                  /* 🔴 4. เปลี่ยน src เป็น Base64 */
                   <img 
-                    src={companyAccount.qr_code_url} 
+                    src={qrDataUrl} 
                     alt="QR Code" 
-                    crossOrigin="anonymous" 
-                    loading="eager" // 💡 บังคับโหลดทันที
                     className="w-full h-full object-contain" 
                   />
                ) : (
