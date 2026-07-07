@@ -9,62 +9,36 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
   if (!isOpen || !tutor) return null;
 
   const handleDownloadImage = async () => {
-    const node = invoiceRef.current;
+    const node = payslipRef.current;
     if (!node) return;
     
     setIsDownloading(true);
     try {
-      // 🔴 เพิ่ม: บังคับโหลดภาพให้ครบด้วย Promise
-      const images = Array.from(node.querySelectorAll('img, div')).filter(el => 
-        window.getComputedStyle(el).backgroundImage !== 'none' || el.tagName === 'IMG'
-      );
-      
-      await Promise.all(images.map(img => {
-        return new Promise((resolve) => {
-          if (img.tagName === 'IMG' && !img.complete) {
-            img.onload = resolve;
-            img.onerror = resolve;
-          } else {
-            resolve();
-          }
-        });
-      }));
-
-      // พักจังหวะให้ Safari เตรียมทรัพยากร
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const captureOptions = {
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        style: { overflow: 'visible', margin: '0' },
-        cacheBust: true, // รอบนี้เปิดไว้เพื่อให้ Safari อัปเดตไฟล์ใหม่
-        filter: (node) => {
-            // บังคับให้ตัดเงาหรือ filter แปลกๆ ออก เพื่อป้องกัน Safari แบน
-            return true;
-        }
+        style: { overflow: 'visible', margin: '0' }
       };
 
-      // 🔴 เพิ่มรอบถ่ายล่อ (Safari ต้องการรอบแรกเพื่อตื่น รอบสองเพื่อวาด)
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
       const dataUrl = await toJpeg(node, { 
         ...captureOptions, 
         quality: 1.0, 
-        pixelRatio: scale 
+        pixelRatio: 2 
       });
       
       const link = document.createElement('a');
       link.href = dataUrl;
-      link.download = `Invoice_${student.username}_${billingMonth}.jpg`; 
-      document.body.appendChild(link); 
+      link.download = `Payslip_${tutor.username}_${billingMonth}.jpg`; 
       link.click();
-      document.body.removeChild(link); 
     } catch (error) {
       console.error('Error saving image:', error);
-      alert(`ไม่สามารถบันทึกภาพได้: ${error.message}`);
+      alert(`เกิดข้อผิดพลาดในการบันทึกภาพ: ${error.message}`);
     } finally {
       setIsDownloading(false);
     }
@@ -82,42 +56,18 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
         </div>
 
         <div className="flex-1 overflow-y-auto bg-gray-100 p-4 sm:p-8 flex justify-center">
-          <div 
-            ref={payslipRef} 
-            className="w-full max-w-[210mm] bg-white shadow-sm border border-gray-200 p-1"
-          >
-            <TutorPayslip 
-              tutor={tutor} 
-              logs={logs} 
-              totalAmount={totalAmount} 
-              billingMonth={billingMonth} 
-            />
+          <div ref={payslipRef} className="w-full max-w-[210mm] bg-white shadow-sm border border-gray-200 p-1">
+            <TutorPayslip tutor={tutor} logs={logs} totalAmount={totalAmount} billingMonth={billingMonth} />
           </div>
         </div>
 
         <div className="p-4 border-t flex justify-end space-x-3 bg-white shrink-0">
-          <button 
-            onClick={onClose} 
-            disabled={isDownloading} 
-            className="px-5 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition disabled:opacity-50"
-          >
-            ปิดหน้าต่าง
-          </button>
-          <button 
-            onClick={handleDownloadImage} 
-            disabled={isDownloading} 
-            className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition flex items-center space-x-2 shadow-sm disabled:opacity-70"
-          >
+          <button onClick={onClose} disabled={isDownloading} className="px-5 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition disabled:opacity-50">ปิดหน้าต่าง</button>
+          <button onClick={handleDownloadImage} disabled={isDownloading} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition flex items-center space-x-2 shadow-sm disabled:opacity-70">
             {isDownloading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <span>กำลังสร้างรูปภาพ...</span>
-              </>
+              <><svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>กำลังสร้างรูปภาพ...</span></>
             ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                <span>ดาวน์โหลดเป็น JPG</span>
-              </>
+              <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg><span>ดาวน์โหลดเป็น JPG</span></>
             )}
           </button>
         </div>

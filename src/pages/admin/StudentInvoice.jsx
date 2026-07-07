@@ -4,43 +4,54 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
   
-  const [logoDataUrl, setLogoDataUrl] = useState('/logo.png');
+  // 🔴 1. ตั้งค่าเริ่มต้นเป็น null เพื่อไม่ให้ Safari เห็น URL ภายนอกเด็ดขาด
+  const [logoDataUrl, setLogoDataUrl] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
 
   useEffect(() => {
-    const convertImageToBase64 = async (url, setBase64) => {
-      if (!url) return;
-      const absoluteUrl = url.startsWith('http') 
-        ? url 
-        : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+    let isMounted = true;
 
+    const fetchBase64 = async (url) => {
       try {
-        const response = await fetch(absoluteUrl);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => setBase64(reader.result);
-        reader.readAsDataURL(blob);
-      } catch (error) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width || 512;
-          canvas.height = img.height || 512;
-          canvas.getContext('2d').drawImage(img, 0, 0);
-          setBase64(canvas.toDataURL('image/png'));
-        };
-        img.onerror = () => setBase64(absoluteUrl); 
-        img.src = absoluteUrl;
+        const absoluteUrl = url.startsWith('http') ? url : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+        const res = await fetch(absoluteUrl);
+        const blob = await res.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width || 512;
+            canvas.height = img.height || 512;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          };
+          img.onerror = () => resolve(null);
+          img.src = url;
+        });
       }
     };
 
-    convertImageToBase64('/logo.png', setLogoDataUrl);
-    if (companyAccount?.qr_code_url) {
-      convertImageToBase64(companyAccount.qr_code_url, setQrDataUrl);
-    } else {
-      setQrDataUrl(null);
-    }
+    const loadImages = async () => {
+      const logo = await fetchBase64('/logo.png');
+      if (isMounted) setLogoDataUrl(logo);
+
+      if (companyAccount?.qr_code_url) {
+        const qr = await fetchBase64(companyAccount.qr_code_url);
+        if (isMounted) setQrDataUrl(qr);
+      } else {
+        if (isMounted) setQrDataUrl('NONE'); 
+      }
+    };
+
+    loadImages();
+    return () => { isMounted = false; };
   }, [companyAccount?.qr_code_url]);
 
   const toggleGroup = (groupId) => {
@@ -53,30 +64,18 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
 
   const groupedLogs = useMemo(() => {
     const groupedObj = {};
-    
     logs.forEach(log => {
       const groupKey = `${log.tutor_id}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${log.ratePerHour}_${log.grade || 'no-grade'}`;
-
       if (!groupedObj[groupKey]) {
         groupedObj[groupKey] = {
-          id: groupKey,
-          tutorData: log.tutor || log.users, 
-          learning_type: log.learning_type,
-          subjects: log.subjects,
-          custom_courses: log.custom_courses,
-          grade: log.grade,
-          ratePerHour: log.ratePerHour,
-          total_duration: 0,
-          total_amount: 0,
-          sessions: []
+          id: groupKey, tutorData: log.tutor || log.users, learning_type: log.learning_type, subjects: log.subjects,
+          custom_courses: log.custom_courses, grade: log.grade, ratePerHour: log.ratePerHour, total_duration: 0, total_amount: 0, sessions: []
         };
       }
-      
       groupedObj[groupKey].total_duration += Number(log.duration_hours);
       groupedObj[groupKey].total_amount += Number(log.amount);
       groupedObj[groupKey].sessions.push(log);
     });
-
     return Object.values(groupedObj);
   }, [logs]);
 
@@ -87,21 +86,11 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
-          {/* 🔴 ท่าไม้ตาย 1: เปลี่ยนจากแท็ก <img> เป็น <div> ใส่ Background แก้บั๊ก iOS Safari */}
+          {/* 🔴 2. จะเรนเดอร์รูปก็ต่อเมื่อแปลงเป็น Base64 เสร็จแล้วเท่านั้น */}
           {logoDataUrl ? (
-            <div 
-              className="w-32 h-14 mb-1"
-              style={{
-                backgroundImage: `url(${logoDataUrl})`,
-                backgroundSize: 'contain',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat'
-              }}
-            />
+            <img src={logoDataUrl} alt="PUN-IQ Academy" className="w-32 h-14 mb-1 object-contain" />
           ) : (
-            <div className="h-14 w-28 mb-1 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded">
-              <span className="text-gray-400 font-bold text-[9px]">LOGO PUN-IQ</span>
-            </div>
+            <div className="h-14 w-28 mb-1 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded text-gray-400 text-[9px] font-bold">กำลังโหลด...</div>
           )}
 
           <div className="w-full bg-[#dcebf8] py-1 flex justify-center items-center mt-1">
@@ -145,20 +134,11 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
               {groupedLogs.map((group) => (
                 <React.Fragment key={group.id}>
                   <tr onClick={() => toggleGroup(group.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors border-b border-gray-100">
-                    <td className="py-1.5 px-1 text-center">
-                      <svg className={`w-3 h-3 transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-[#1b4379]' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                    </td>
-                    <td className="py-1.5 px-1 text-center font-bold text-[#1b4379]">
-                      {group.sessions.length}
-                    </td>
-                    
-                    <td className="py-1.5 px-1 text-center font-semibold text-[#1b4379] break-words leading-tight">
-                      {group.tutorData?.name || group.tutorData?.username || '-'}
-                    </td>
+                    <td className="py-1.5 px-1 text-center"><svg className={`w-3 h-3 transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-[#1b4379]' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></td>
+                    <td className="py-1.5 px-1 text-center font-bold text-[#1b4379]">{group.sessions.length}</td>
+                    <td className="py-1.5 px-1 text-center font-semibold text-[#1b4379] break-words leading-tight">{group.tutorData?.name || group.tutorData?.username || '-'}</td>
                     <td className="py-1.5 px-1 text-center break-words leading-tight">
-                      {group.learning_type === 'course' ? (
-                        <span className="font-bold text-amber-700">🏆 {group.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>
-                      ) : (
+                      {group.learning_type === 'course' ? (<span className="font-bold text-amber-700">🏆 {group.custom_courses?.course_name || 'คอร์สพิเศษ'}</span>) : (
                         <div className="flex flex-wrap items-center justify-center gap-1">
                           {group.learning_type === 'advanced' && <span className="text-[9px] px-1 rounded font-bold bg-purple-100 text-purple-700">Adv</span>}
                           <span>{group.subjects?.subject_name || '-'}</span>
@@ -177,10 +157,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
                         <td colSpan="3" className="py-1 px-2 text-gray-600 font-medium">
                           <div className="flex items-center">
                             <svg className={`w-2.5 h-2.5 mr-1.5 transition-transform shrink-0 ${expandedLogs.includes(session.id) ? 'rotate-90 text-[#1b4379]' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                            <span className="truncate">
-                              ครั้งที่ {index + 1} : {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
-                              {session.grade ? ` (${session.grade})` : group.grade ? ` (${group.grade})` : ''}
-                            </span>
+                            <span className="truncate">ครั้งที่ {index + 1} : {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}{session.grade ? ` (${session.grade})` : group.grade ? ` (${group.grade})` : ''}</span>
                           </div>
                         </td>
                         <td className="py-1 px-1 text-center font-bold text-gray-700">{session.duration_hours}</td>
@@ -193,18 +170,8 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
                           <td className="border-r border-gray-200"></td>
                           <td colSpan="6" className="py-1.5 px-4 sm:px-6 text-left">
                             <div className="flex flex-col space-y-1 text-[10px] bg-[#f8fbff] p-2 rounded border border-[#dcebf8]">
-                              <div className="flex items-start">
-                                <span className="font-bold text-[#1b4379] mr-2 shrink-0">เวลา:</span> 
-                                <span className="text-gray-700">
-                                  {session.start_time ? session.start_time.substring(0, 5) : '-'} น. - {session.end_time ? session.end_time.substring(0, 5) : '-'} น.
-                                </span>
-                              </div>
-                              <div className="flex items-start mt-0.5">
-                                <span className="font-bold text-[#1b4379] mr-2 shrink-0">เนื้อหา:</span> 
-                                <span className="text-gray-600 italic break-words whitespace-pre-wrap leading-tight">
-                                  {session.topic || '-'}
-                                </span>
-                              </div>
+                              <div className="flex items-start"><span className="font-bold text-[#1b4379] mr-2 shrink-0">เวลา:</span><span className="text-gray-700">{session.start_time ? session.start_time.substring(0, 5) : '-'} น. - {session.end_time ? session.end_time.substring(0, 5) : '-'} น.</span></div>
+                              <div className="flex items-start mt-0.5"><span className="font-bold text-[#1b4379] mr-2 shrink-0">เนื้อหา:</span><span className="text-gray-600 italic break-words whitespace-pre-wrap leading-tight">{session.topic || '-'}</span></div>
                             </div>
                           </td>
                         </tr>
@@ -236,48 +203,30 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
         <div className="flex border border-gray-300 bg-gray-50/50 rounded-xs overflow-hidden h-24 sm:h-28">
           <div className="w-1/2 p-2 border-r border-gray-300 flex flex-col justify-center leading-tight">
             <p className="text-gray-400 mb-0.5 text-[9px] sm:text-[10px]">ธนาคาร / ช่องทาง</p>
-            <p className="font-bold text-blue-900 mb-0.5 text-[11px] sm:text-xs">
-              {companyAccount?.bank_name || 'ไม่ได้ระบุธนาคาร'}
-            </p>
+            <p className="font-bold text-blue-900 mb-0.5 text-[11px] sm:text-xs">{companyAccount?.bank_name || 'ไม่ได้ระบุธนาคาร'}</p>
             <p className="text-gray-500 text-[8px] sm:text-[9px] uppercase mt-1">เลขที่บัญชี / หมายเลข</p>
-            <p className="font-bold text-xs sm:text-sm mb-0.5 text-gray-900 tracking-wider">
-              {companyAccount?.account_number || '-'}
-            </p>
-            <p className="font-semibold text-gray-700 text-[10px] sm:text-[11px]">
-              {companyAccount?.account_name || '-'}
-            </p>
+            <p className="font-bold text-xs sm:text-sm mb-0.5 text-gray-900 tracking-wider">{companyAccount?.account_number || '-'}</p>
+            <p className="font-semibold text-gray-700 text-[10px] sm:text-[11px]">{companyAccount?.account_name || '-'}</p>
           </div>
           <div className="w-1/2 p-2 flex justify-between items-center">
             <div className="leading-tight flex flex-col justify-center">
               <p className="text-gray-400 mb-0.5 text-[9px] sm:text-[10px]">สแกนชำระเงิน</p>
-              <p className="font-semibold text-gray-800 text-[10px] sm:text-[11px]">
-                {companyAccount?.account_name || '-'}
-              </p>
+              <p className="font-semibold text-gray-800 text-[10px] sm:text-[11px]">{companyAccount?.account_name || '-'}</p>
             </div>
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
-               {/* 🔴 ท่าไม้ตาย 2: เปลี่ยนแท็ก <img> QR เป็น <div> Background */}
-               {qrDataUrl ? (
-                  <div 
-                    className="w-full h-full"
-                    style={{
-                      backgroundImage: `url(${qrDataUrl})`,
-                      backgroundSize: 'contain',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat'
-                    }}
-                  />
+               {/* 🔴 3. รอโหลด Base64 คิวอาร์โค้ด */}
+               {qrDataUrl === null ? (
+                 <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-bold bg-gray-50">กำลังโหลด...</div>
+               ) : qrDataUrl === 'NONE' ? (
+                 <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-bold bg-gray-50">NO QR</div>
                ) : (
-                  <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-bold bg-gray-50">NO QR</div>
+                 <img src={qrDataUrl} alt="QR Code" className="w-full h-full object-contain" />
                )}
             </div>
           </div>
         </div>
-
-        <p className="text-center text-[10px] text-gray-500 font-bold mt-2">
-          ขอบคุณที่ไว้วางใจ Pun-IQ Academy / ปันความรู้ ปั้นอนาคต
-        </p>
+        <p className="text-center text-[10px] text-gray-500 font-bold mt-2">ขอบคุณที่ไว้วางใจ Pun-IQ Academy / ปันความรู้ ปั้นอนาคต</p>
       </div>
-
     </div>
   );
 }
