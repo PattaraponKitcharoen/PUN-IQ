@@ -14,27 +14,23 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
     
     setIsDownloading(true);
     try {
-      // 🔴 1. เพิ่มเวลาให้ภาพโลโก้และ QR Code โหลดลง DOM ให้เสร็จ 100%
       await new Promise(resolve => setTimeout(resolve, 800));
 
       const captureOptions = {
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        // 🔴 2. เอา cacheBust ออก เพราะ Safari ชอบแบนภาพเวลาที่มี Parameter ต่อท้าย
+        useCORS: true,      // 🔴 เพิ่ม: ปลดล็อก CORS ให้ Safari
+        allowTaint: true,   // 🔴 เพิ่ม: อนุญาตให้อ่านภาพภายนอก
         style: {
           overflow: 'visible',
           margin: '0',
         }
       };
 
-      // 🔴 3. ถ่ายรูปรอบแรก (ล่อให้ Safari แปลงรูปภาพทั้งหมดเป็น Base64)
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
-      
-      // 🔴 4. เว้นจังหวะพักหายใจให้ Safari ประมวลผลภาพลงแคชให้เสร็จ (สำคัญมากสำหรับ iPad/iPhone)
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      // ถ่ายรูปรอบจริง
       const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
       const dataUrl = await toJpeg(node, { 
         ...captureOptions, 

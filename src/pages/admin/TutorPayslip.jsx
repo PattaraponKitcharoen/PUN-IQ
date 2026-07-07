@@ -4,23 +4,35 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
   
-  // 🔴 1. เพิ่ม State เก็บรูปภาพแบบ Base64 (แก้บั๊ก Safari)
   const [logoDataUrl, setLogoDataUrl] = useState('/logo.png');
   const [qrDataUrl, setQrDataUrl] = useState(null);
 
-  // 🔴 2. แปลงภาพเป็น Base64
   useEffect(() => {
     const convertImageToBase64 = async (url, setBase64) => {
       if (!url) return;
+      
+      const absoluteUrl = url.startsWith('http') 
+        ? url 
+        : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+
       try {
-        const response = await fetch(url, { cache: 'no-cache' });
+        const response = await fetch(absoluteUrl);
         const blob = await response.blob();
         const reader = new FileReader();
         reader.onloadend = () => setBase64(reader.result);
         reader.readAsDataURL(blob);
       } catch (error) {
-        console.error('Failed to convert image:', error);
-        setBase64(url); // Fallback
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width || 512;
+          canvas.height = img.height || 512;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          setBase64(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => setBase64(absoluteUrl); 
+        img.src = absoluteUrl;
       }
     };
 
@@ -76,11 +88,10 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
-          {/* 🔴 3. เปลี่ยน src เป็น Base64 */}
           <img 
             src={logoDataUrl} 
             alt="PUN-IQ Academy" 
-            className="h-14 mb-1 object-contain"
+            className="w-32 h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
               const div = document.createElement('div');
@@ -230,7 +241,6 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
             </div>
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
                {qrDataUrl ? (
-                  /* 🔴 4. เปลี่ยน src เป็น Base64 */
                   <img 
                     src={qrDataUrl} 
                     alt="Tutor QR Code" 

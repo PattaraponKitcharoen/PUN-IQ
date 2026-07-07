@@ -4,23 +4,37 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
   
-  // 🔴 1. เพิ่ม State เก็บรูปภาพแบบ Base64 (แก้บั๊ก Safari)
   const [logoDataUrl, setLogoDataUrl] = useState('/logo.png');
   const [qrDataUrl, setQrDataUrl] = useState(null);
 
-  // 🔴 2. ฟังก์ชันโหลดภาพมาแปลงเป็น Base64 ตอนเปิดบิล
   useEffect(() => {
     const convertImageToBase64 = async (url, setBase64) => {
       if (!url) return;
+      
+      // 🔴 1. แปลงเป็น Absolute URL เสมอ เพื่อแก้ปัญหา Safari หาพาทไฟล์โลโก้ไม่เจอ
+      const absoluteUrl = url.startsWith('http') 
+        ? url 
+        : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+
       try {
-        const response = await fetch(url, { cache: 'no-cache' });
+        const response = await fetch(absoluteUrl);
         const blob = await response.blob();
         const reader = new FileReader();
         reader.onloadend = () => setBase64(reader.result);
         reader.readAsDataURL(blob);
       } catch (error) {
-        console.error('Failed to convert image:', error);
-        setBase64(url); // ถ้าแปลงไม่สำเร็จให้ใช้ URL เดิม
+        // 🔴 2. ท่าไม้ตายรองรับ Safari: ใช้ Canvas วาดรูปแทนถ้า Fetch ติด CORS
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width || 512;
+          canvas.height = img.height || 512;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          setBase64(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => setBase64(absoluteUrl); // ยอมแพ้ กลับไปใช้ URL
+        img.src = absoluteUrl;
       }
     };
 
@@ -76,11 +90,11 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
-          {/* 🔴 3. เปลี่ยน src เป็น Base64 */}
+          {/* 🔴 3. เพิ่ม w-32 บังคับความกว้างให้โลโก้ เพราะ Safari จะทำภาพหายถ้าไม่ใส่ width */}
           <img 
             src={logoDataUrl} 
             alt="PUN-IQ Academy" 
-            className="h-14 mb-1 object-contain"
+            className="w-32 h-14 mb-1 object-contain"
             onError={(e) => {
               e.target.onerror = null; 
               const div = document.createElement('div');
@@ -241,7 +255,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
             </div>
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
                {qrDataUrl ? (
-                  /* 🔴 4. เปลี่ยน src เป็น Base64 */
                   <img 
                     src={qrDataUrl} 
                     alt="QR Code" 

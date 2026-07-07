@@ -14,24 +14,21 @@ export default function TutorPayslipModal({ isOpen, onClose, tutor, logs, totalA
     
     setIsDownloading(true);
     try {
-      // 🔴 1. เพิ่มเวลาให้ภาพรอโหลด
       await new Promise(resolve => setTimeout(resolve, 800));
 
       const captureOptions = {
         backgroundColor: '#ffffff',
         width: node.scrollWidth,
         height: node.scrollHeight,
-        // 🔴 2. เอา cacheBust ออก
+        useCORS: true,      // 🔴 เพิ่ม: ปลดล็อก CORS ให้ Safari
+        allowTaint: true,   // 🔴 เพิ่ม: อนุญาตให้อ่านภาพภายนอก
         style: {
           overflow: 'visible',
           margin: '0',
         }
       };
 
-      // 🔴 3. ถ่ายรูปรอบแรก (ล่อ Safari)
       await toJpeg(node, { ...captureOptions, quality: 0.1 });
-      
-      // 🔴 4. จังหวะพักให้ Safari ทำการฝังรูป Base64 ลงแคช
       await new Promise(resolve => setTimeout(resolve, 200));
       
       const scale = window.devicePixelRatio ? window.devicePixelRatio * 1.5 : 3;
