@@ -10,8 +10,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
   useEffect(() => {
     const convertImageToBase64 = async (url, setBase64) => {
       if (!url) return;
-      
-      // 🔴 1. แปลงเป็น Absolute URL เสมอ เพื่อแก้ปัญหา Safari หาพาทไฟล์โลโก้ไม่เจอ
       const absoluteUrl = url.startsWith('http') 
         ? url 
         : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
@@ -23,7 +21,6 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
         reader.onloadend = () => setBase64(reader.result);
         reader.readAsDataURL(blob);
       } catch (error) {
-        // 🔴 2. ท่าไม้ตายรองรับ Safari: ใช้ Canvas วาดรูปแทนถ้า Fetch ติด CORS
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
@@ -33,7 +30,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
           canvas.getContext('2d').drawImage(img, 0, 0);
           setBase64(canvas.toDataURL('image/png'));
         };
-        img.onerror = () => setBase64(absoluteUrl); // ยอมแพ้ กลับไปใช้ URL
+        img.onerror = () => setBase64(absoluteUrl); 
         img.src = absoluteUrl;
       }
     };
@@ -90,20 +87,24 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
-          {/* 🔴 3. เพิ่ม w-32 บังคับความกว้างให้โลโก้ เพราะ Safari จะทำภาพหายถ้าไม่ใส่ width */}
-          <img 
-            src={logoDataUrl} 
-            alt="PUN-IQ Academy" 
-            className="w-32 h-14 mb-1 object-contain"
-            onError={(e) => {
-              e.target.onerror = null; 
-              const div = document.createElement('div');
-              div.className = "h-14 w-28 mb-1 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded";
-              div.innerHTML = '<span class="text-gray-400 font-bold text-[9px]">LOGO PUN-IQ</span>';
-              e.target.parentNode.replaceChild(div, e.target);
-            }}
-          />
-          <div className="w-full bg-[#dcebf8] py-1 flex justify-center items-center">
+          {/* 🔴 ท่าไม้ตาย 1: เปลี่ยนจากแท็ก <img> เป็น <div> ใส่ Background แก้บั๊ก iOS Safari */}
+          {logoDataUrl ? (
+            <div 
+              className="w-32 h-14 mb-1"
+              style={{
+                backgroundImage: `url(${logoDataUrl})`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}
+            />
+          ) : (
+            <div className="h-14 w-28 mb-1 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded">
+              <span className="text-gray-400 font-bold text-[9px]">LOGO PUN-IQ</span>
+            </div>
+          )}
+
+          <div className="w-full bg-[#dcebf8] py-1 flex justify-center items-center mt-1">
             <span className="font-bold text-[#1b4379] tracking-wide text-xs">ใบแจ้งค่าเรียน / Invoice</span>
           </div>
         </div>
@@ -254,11 +255,16 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
               </p>
             </div>
             <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
+               {/* 🔴 ท่าไม้ตาย 2: เปลี่ยนแท็ก <img> QR เป็น <div> Background */}
                {qrDataUrl ? (
-                  <img 
-                    src={qrDataUrl} 
-                    alt="QR Code" 
-                    className="w-full h-full object-contain" 
+                  <div 
+                    className="w-full h-full"
+                    style={{
+                      backgroundImage: `url(${qrDataUrl})`,
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat'
+                    }}
                   />
                ) : (
                   <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[10px] text-gray-400 font-bold bg-gray-50">NO QR</div>

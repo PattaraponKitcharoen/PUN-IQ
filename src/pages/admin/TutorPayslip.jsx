@@ -10,7 +10,6 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
   useEffect(() => {
     const convertImageToBase64 = async (url, setBase64) => {
       if (!url) return;
-      
       const absoluteUrl = url.startsWith('http') 
         ? url 
         : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
@@ -88,19 +87,24 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
       
       <div className="shrink-0">
         <div className="flex flex-col items-center mb-2">
-          <img 
-            src={logoDataUrl} 
-            alt="PUN-IQ Academy" 
-            className="w-32 h-14 mb-1 object-contain"
-            onError={(e) => {
-              e.target.onerror = null; 
-              const div = document.createElement('div');
-              div.className = "h-14 w-28 mb-1 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded";
-              div.innerHTML = '<span class="text-gray-400 font-bold text-[9px]">LOGO PUN-IQ</span>';
-              e.target.parentNode.replaceChild(div, e.target);
-            }}
-          />
-          <div className="w-full bg-[#fdf3c6] py-1 flex justify-center items-center">
+          {/* 🔴 ท่าไม้ตาย 1: ใช้ <div> วาดพื้นหลังแทนรูป */}
+          {logoDataUrl ? (
+            <div 
+              className="w-32 h-14 mb-1"
+              style={{
+                backgroundImage: `url(${logoDataUrl})`,
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }}
+            />
+          ) : (
+            <div className="h-14 w-28 mb-1 flex items-center justify-center bg-gray-50 border border-dashed border-gray-300 rounded">
+              <span className="text-gray-400 font-bold text-[9px]">LOGO PUN-IQ</span>
+            </div>
+          )}
+
+          <div className="w-full bg-[#fdf3c6] py-1 flex justify-center items-center mt-1">
             <span className="font-bold text-[#8b6508] tracking-wide text-xs">ใบสรุปเงินเดือนครู / Payslip</span>
           </div>
         </div>
@@ -240,11 +244,16 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
               </p>
             </div>
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white flex items-center justify-center p-1 shrink-0 ml-1 border border-gray-200 rounded shadow-sm">
+               {/* 🔴 ท่าไม้ตาย 2: เปลี่ยนแท็ก <img> QR เป็น <div> Background */}
                {qrDataUrl ? (
-                  <img 
-                    src={qrDataUrl} 
-                    alt="Tutor QR Code" 
-                    className="w-full h-full object-contain" 
+                  <div 
+                    className="w-full h-full"
+                    style={{
+                      backgroundImage: `url(${qrDataUrl})`,
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat'
+                    }}
                   />
                ) : (
                   <div className="w-full h-full border border-dashed border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-bold bg-gray-50 text-center leading-tight">ยังไม่เพิ่ม<br/>QR Code</div>
