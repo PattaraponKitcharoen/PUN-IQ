@@ -58,7 +58,6 @@ export default function EditTimeLog() {
 
     const fetchCourses = async () => {
       if (log.learning_type === 'course' && log.tutor_id) {
-        // 🔴 3. ดึงคอร์สจากตารางเชื่อม course_tutors สำหรับหน้า Edit ด้วย
         const { data } = await supabase
           .from('course_tutors')
           .select('custom_courses(*)')
@@ -67,11 +66,10 @@ export default function EditTimeLog() {
         if (data) {
           const activeCourses = data.map(ct => ct.custom_courses).filter(c => c && c.is_active);
           
-          // กรองให้เหลือเฉพาะคอร์สที่เกี่ยวข้องกับนักเรียนหรือเปิดกว้าง
           const filteredForEdit = activeCourses.filter(c => 
-             !c.student_id && !c.group_id || // เป็นคอร์สแบบ Custom
-             String(c.student_id) === String(log.student_id) || // เป็นคอร์สเดี่ยวของนักเรียนคนนี้
-             String(c.id) === String(log.custom_course_id) // เป็นคอร์สเดิมที่เลือกอยู่แล้ว
+             !c.student_id && !c.group_id || 
+             String(c.student_id) === String(log.student_id) || 
+             String(c.id) === String(log.custom_course_id) 
           );
           setCustomCourses(filteredForEdit);
         }
@@ -184,15 +182,18 @@ export default function EditTimeLog() {
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 {isClassroomTutor ? 'แพ็กเกจสถานที่ที่ใช้งาน' : 'คอร์สพิเศษที่ใช้งาน'}
               </label>
+              {/* 🔴 เพิ่มการป้องกันการแปลภาษาและล็อกฟอนต์ใน Dropdown */}
               <select 
                 value={selectedCourseId} 
                 onChange={(e) => setSelectedCourseId(e.target.value)} 
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none font-medium"
+                translate="no"
+                lang="th"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none font-sans font-medium bg-white"
                 required
               >
-                <option value="">-- เลือกแพ็กเกจ --</option>
+                <option value="" translate="no">-- เลือกแพ็กเกจ --</option>
                 {customCourses.map(course => (
-                  <option key={course.id} value={course.id}>{course.course_name}</option>
+                  <option key={course.id} value={course.id} translate="no">{course.course_name}</option>
                 ))}
               </select>
             </div>
@@ -202,17 +203,17 @@ export default function EditTimeLog() {
             <label className="block text-gray-700 text-sm font-bold mb-2">
               {isClassroomTutor ? 'วันที่ใช้งาน' : 'วันที่สอน'}
             </label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition" required />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition font-sans" required />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2">เวลาเริ่ม</label>
-              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition" required />
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition font-sans" required />
             </div>
             <div>
               <label className="block text-gray-700 text-sm font-bold mb-2">เวลาสิ้นสุด</label>
-              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition" required />
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-gray-50 hover:bg-white transition font-sans" required />
             </div>
           </div>
 
@@ -223,7 +224,7 @@ export default function EditTimeLog() {
             <textarea 
               value={topic} 
               onChange={(e) => setTopic(e.target.value)} 
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none h-32 resize-none bg-gray-50 hover:bg-white transition" 
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none h-32 resize-none bg-gray-50 hover:bg-white transition font-sans" 
               placeholder={isClassroomTutor ? "โน้ตเพิ่มเติมสำหรับการใช้งานสถานที่..." : "ระบุเนื้อหาที่สอน ความคืบหน้า หรือการบ้านที่สั่ง..."}
             ></textarea>
           </div>

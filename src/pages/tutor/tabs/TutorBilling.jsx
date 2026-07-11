@@ -15,7 +15,6 @@ export default function TutorEarnings() {
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
 
-  // 🔴 1. ตรวจจับสถานะว่าเป็นไอดีสถาบันสำหรับห้องเช่าหรือไม่
   const isClassroomTutor = sessionUser?.username === 'Classroom';
 
   const toggleGroup = (groupId) => {
@@ -79,7 +78,6 @@ export default function TutorEarnings() {
         ? log.custom_courses?.grade_level
         : log.grade_level;
       
-      // 🔴 2. ปรับตรรกะคณิตศาสตร์สำหรับคำนวณยอดเงินเช่าห้องให้ลงตัวถูกต้องตามเกณฑ์รอบบิล
       let amount = 0;
       let roundsForDisplay = null;
 
@@ -88,7 +86,7 @@ export default function TutorEarnings() {
         const courseName = log.custom_courses?.course_name || '';
         const match = courseName.match(/([\d.]+)\s*ชม\.\/รอบ/);
         if (match) {
-          rounds = Number(log.duration_hours) / Number(match[1]); // เวลาจริง หาร เกณฑ์รอบ
+          rounds = Number(log.duration_hours) / Number(match[1]); 
           roundsForDisplay = rounds;
         }
         amount = Math.round(rounds * ratePerHour * 100) / 100;
@@ -139,8 +137,6 @@ export default function TutorEarnings() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-10">
-      
-      {/* 🔴 3. ปรับเปลี่ยนข้อความต้อนรับและคำอธิบาย Header ด้านบนตามสถานะผู้ใช้ */}
       <div className={`bg-gradient-to-r rounded-2xl p-8 text-white shadow-lg ${isClassroomTutor ? 'from-emerald-600 to-teal-800' : 'from-indigo-600 to-slate-800'}`}>
         <h1 className="text-3xl font-bold mb-2">
           {isClassroomTutor ? `สรุปรายได้สุทธิค่าเช่าสถานที่` : `สรุปรายได้การสอน, ${sessionUser?.name || sessionUser?.username || ''} 💼`}
@@ -151,8 +147,6 @@ export default function TutorEarnings() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
-        {/* ซ้าย: ตัวกรองและสรุปยอด */}
         <div className="lg:col-span-1 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
             <h2 className="text-sm font-bold text-gray-800 uppercase mb-3 border-b pb-2">เลือกเดือนที่ต้องการดู</h2>
@@ -161,7 +155,9 @@ export default function TutorEarnings() {
                 type="month" 
                 value={selectedMonth} 
                 onChange={(e) => setSelectedMonth(e.target.value)} 
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 font-medium text-gray-700 bg-gray-50 hover:bg-white transition" 
+                translate="no"
+                lang="th"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 font-sans font-medium text-gray-700 bg-gray-50 hover:bg-white transition" 
               />
             </div>
           </div>
@@ -189,7 +185,6 @@ export default function TutorEarnings() {
           </div>
         </div>
 
-        {/* ขวา: ตารางประวัติการสอน */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
             <div className="flex justify-between items-center mb-6 border-b pb-4">
@@ -217,7 +212,6 @@ export default function TutorEarnings() {
                     <tr>
                       <th className="p-3 w-10 text-center"></th> 
                       <th className="p-3 font-bold whitespace-nowrap">จำนวนครั้ง</th>
-                      {/* 🔴 4. สลับคำศัพท์ตรงหัวคอลัมน์ตารางให้ตรงความเหมาะสม */}
                       <th className="p-3 font-bold">{isClassroomTutor ? 'ผู้เช่าสถานที่ / นักเรียน' : 'สอนนักเรียน'}</th>
                       <th className="p-3 font-bold">{isClassroomTutor ? 'รายละเอียดห้องที่กำหนด' : 'วิชา / คอร์ส'}</th>
                       <th className="p-3 font-bold text-center">{isClassroomTutor ? 'เวลาใช้งาน' : 'รวม ชม.'}</th>
@@ -228,7 +222,6 @@ export default function TutorEarnings() {
                   <tbody className="divide-y divide-gray-100">
                     {groupedLogs.map((group) => (
                       <React.Fragment key={group.id}>
-                        {/* ชั้นที่ 1: แถวสรุปกลุ่มวิชา */}
                         <tr onClick={() => toggleGroup(group.id)} className="hover:bg-emerald-50/50 cursor-pointer transition-colors group border-b border-gray-100">
                           <td className="p-3 text-center">
                             <svg className={`w-4 h-4 text-gray-400 inline-block transition-transform ${expandedGroups.includes(group.id) ? 'rotate-90 text-emerald-600' : 'group-hover:text-emerald-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
@@ -236,7 +229,7 @@ export default function TutorEarnings() {
                           <td className="p-3 whitespace-nowrap text-emerald-800 font-bold">
                             {group.sessions.length} ครั้ง
                           </td>
-                          <td className="p-3 font-semibold text-indigo-700">
+                          <td className="p-3 font-semibold text-indigo-700" translate="no">
                             {group.users?.name || group.users?.username || '-'}
                           </td>
                           <td className="p-3">
@@ -264,18 +257,17 @@ export default function TutorEarnings() {
                           <td className="p-3 text-right font-bold text-emerald-700">฿{group.total_amount.toLocaleString()}</td>
                         </tr>
 
-                        {/* ชั้นที่ 2: แถวรายละเอียดรายวัน */}
                         {expandedGroups.includes(group.id) && group.sessions.map((session, index) => (
                           <React.Fragment key={session.id}>
                             <tr onClick={() => toggleRow(session.id)} className="bg-slate-50/50 hover:bg-slate-100 cursor-pointer border-l-2 border-emerald-500 group">
                               <td className="p-2 border-r border-gray-200"></td>
                               <td colSpan="3" className="p-3 text-gray-600 font-medium">
                                 <div className="flex items-center">
+                                  {/* 🔴 แก้ไขจุดที่พิมพ์ผิดตรงบรรทัดนี้แล้วครับ (ซ่อนอยู่ในวงเล็บคลาส) */}
                                   <svg className={`w-3.5 h-3.5 mr-2 transition-transform ${expandedLogs.includes(session.id) ? 'rotate-90 text-emerald-600' : 'text-gray-400 group-hover:text-emerald-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                   ครั้งที่ {index + 1} : วันที่ {new Date(session.teaching_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
                               </td>
-                              {/* 🔴 5. ปรับให้แถวรายวัน แสดงจำนวนรอบควบคู่ไปด้วยกันอย่างละเอียดโปร่งใส */}
                               <td className="p-3 text-center font-bold text-gray-700">
                                 {session.duration_hours} ชม.
                                 {session.roundsForDisplay && <span className="block text-[10px] text-emerald-600 font-bold">({session.roundsForDisplay} รอบ)</span>}
@@ -284,7 +276,6 @@ export default function TutorEarnings() {
                               <td className="p-3 text-right font-bold text-gray-800">฿{session.amount.toLocaleString()}</td>
                             </tr>
 
-                            {/* ชั้นที่ 3: แถวรายละเอียดเวลาและเนื้อหา */}
                             {expandedLogs.includes(session.id) && (
                               <tr className="bg-emerald-50/20 border-b border-gray-100 border-l-2 border-emerald-500">
                                 <td className="border-r border-gray-200"></td>

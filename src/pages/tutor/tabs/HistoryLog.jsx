@@ -10,7 +10,6 @@ export default function HistoryLog() {
   const [isClassroomTutor, setIsClassroomTutor] = useState(false);
   const navigate = useNavigate();
 
-  // 🔴 1. เพิ่ม State เก็บค่าเดือน (ค่าเริ่มต้นคือเดือนปัจจุบัน)
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -62,7 +61,6 @@ export default function HistoryLog() {
         setIsClassroomTutor(true);
       }
 
-      // 🔴 2. คำนวณวันแรกและวันสุดท้ายของเดือนที่เลือก
       const [year, month] = selectedMonth.split('-');
       const startDate = `${year}-${month}-01`;
       const lastDay = new Date(Number(year), Number(month), 0).getDate();
@@ -72,8 +70,8 @@ export default function HistoryLog() {
         .from('teaching_logs')
         .select('*, users!teaching_logs_student_id_fkey(name, username), subjects(subject_name), custom_courses(course_name)')
         .eq('tutor_id', tutorId)
-        .gte('teaching_date', startDate) // 🔴 3. กรองตั้งแต่วันแรกของเดือน
-        .lte('teaching_date', endDate)   // 🔴 4. จนถึงวันสุดท้ายของเดือน
+        .gte('teaching_date', startDate) 
+        .lte('teaching_date', endDate)   
         .order('teaching_date', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -86,7 +84,6 @@ export default function HistoryLog() {
     setLoading(false);
   };
 
-  // 🔴 5. เปลี่ยนมาเรียกใช้ fetchLogs เมื่อค่าเดือนถูกเปลี่ยน
   useEffect(() => {
     fetchLogs();
   }, [selectedMonth]);
@@ -95,7 +92,6 @@ export default function HistoryLog() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* 🔴 6. จัดกลุ่ม Header ใหม่ให้ช่องเลือกเดือนอยู่ด้านขวา */}
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">
@@ -108,11 +104,14 @@ export default function HistoryLog() {
         
         <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center space-x-3 w-full md:w-auto">
           <span className="text-sm font-bold text-gray-600 uppercase whitespace-nowrap">เลือกเดือน:</span>
+          {/* 🔴 เพิ่มเกราะป้องกันการแปลภาษาที่ตัวเลือกเดือน */}
           <input 
             type="month" 
             value={selectedMonth} 
             onChange={(e) => setSelectedMonth(e.target.value)} 
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto"
+            translate="no"
+            lang="th"
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto font-sans"
           />
         </div>
       </div>
