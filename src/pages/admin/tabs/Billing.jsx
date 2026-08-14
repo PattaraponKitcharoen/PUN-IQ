@@ -8,7 +8,10 @@ import { saveAs } from 'file-saver';
 
 import StudentInvoice from '../StudentInvoice';
 import TutorPayslip from '../TutorPayslip';
+
+// 🔴 1. ใช้ toPng (กันบั๊ก oklch ของ Tailwind) และ jsPDF สำหรับทำไฟล์ PDF ใน ZIP
 import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState('tutor');
@@ -22,7 +25,7 @@ export default function Billing() {
 
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showTutorModal, setShowTutorModal] = useState(false);
-  
+
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const today = new Date();
@@ -31,12 +34,15 @@ export default function Billing() {
 
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   const [expandedGroups, setExpandedGroups] = useState([]);
   const [expandedLogs, setExpandedLogs] = useState([]);
 
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [batchRenderData, setBatchRenderData] = useState(null);
+
+  // 🔴 2. เพิ่ม State สำหรับเก็บรูปแบบไฟล์ที่จะ Download Batch
+  const [batchFormat, setBatchFormat] = useState('png');
 
   const toggleGroup = (groupId) => {
     setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]);
@@ -49,7 +55,7 @@ export default function Billing() {
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
-      
+
       try {
         const [tutorsRes, studentsRes, accountsRes] = await Promise.all([
           supabase.from('users')
@@ -60,7 +66,7 @@ export default function Billing() {
           supabase.from('users').select('id, name, username, grade, company_account_id').eq('role', 'student').order('grade'),
           supabase.from('company_accounts').select('*').eq('is_active', true)
         ]);
-        
+
         if (tutorsRes.data) setTutors(tutorsRes.data);
         if (studentsRes.data) setStudents(studentsRes.data);
         if (accountsRes.data) {
@@ -78,16 +84,16 @@ export default function Billing() {
 
   const filteredUsers = useMemo(() => {
     const list = activeTab === 'tutor' ? tutors : students;
-    if (!searchQuery) return list.slice(0, 10); 
-    return list.filter(u => 
-      u.username.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    if (!searchQuery) return list.slice(0, 10);
+    return list.filter(u =>
+      u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    ).slice(0, 10); 
+    ).slice(0, 10);
   }, [searchQuery, tutors, students, activeTab]);
 
   useEffect(() => {
     setSelectedUserId('');
-    setSearchQuery(''); 
+    setSearchQuery('');
     setLogs([]);
     setExpandedGroups([]);
     setExpandedLogs([]);
@@ -133,7 +139,7 @@ export default function Billing() {
       if (selectedUserDetails.company_account_id) {
         setSelectedAccountId(selectedUserDetails.company_account_id);
       } else if (companyAccounts.length > 0) {
-        setSelectedAccountId(companyAccounts[0].id); 
+        setSelectedAccountId(companyAccounts[0].id);
       }
     }
   }, [selectedUserDetails, activeTab, companyAccounts]);
@@ -144,7 +150,7 @@ export default function Billing() {
     let tHrs = 0;
     let tAmt = 0;
     const groupedObj = {};
-    const computedLogs = []; 
+    const computedLogs = [];
 
     logs.forEach(log => {
       const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
@@ -153,21 +159,21 @@ export default function Billing() {
       let amount = 0;
       let roundsForDisplay = null;
       const isClassroom = (activeTab === 'student' && log.users?.username === 'Classroom') || (activeTab === 'tutor' && selectedUserDetails?.username === 'Classroom');
-      
+
       if (isClassroom) {
         let rounds = 1;
         const courseName = log.custom_courses?.course_name || '';
         const match = courseName.match(/\(([\d.]+) ชม\.\/รอบ/);
-        
+
         if (match) {
-           rounds = Number(log.duration_hours) / Number(match[1]);
-           roundsForDisplay = rounds; 
+          rounds = Number(log.duration_hours) / Number(match[1]);
+          roundsForDisplay = rounds;
         }
         amount = Math.round(rounds * ratePerHour * 100) / 100;
       } else {
         amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
       }
-      
+
       tHrs += Number(log.duration_hours);
       tAmt += amount;
 
@@ -175,7 +181,7 @@ export default function Billing() {
       computedLogs.push(processedLog);
 
       const counterpartyId = activeTab === 'tutor' ? log.student_id : log.tutor_id;
-      
+
       const groupKey = `${counterpartyId}_${log.learning_type}_${log.subject_id || 'no-subj'}_${log.custom_course_id || 'no-crs'}_${ratePerHour}_${grade || 'no-grade'}`;
 
       if (!groupedObj[groupKey]) {
@@ -200,7 +206,9 @@ export default function Billing() {
     return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs, groupedLogs: Object.values(groupedObj) };
   }, [logs, activeTab, selectedUserDetails]);
 
-  const handleBatchDownload = async () => {
+  // 🔴 3. รับ parameter format เข้ามาตอนกดปุ่ม
+  const handleBatchDownload = async (format) => {
+    setBatchFormat(format);
     setIsBatchDownloading(true);
     const [year, month] = selectedMonth.split('-');
     const startDate = `${year}-${month}-01`;
@@ -256,12 +264,14 @@ export default function Billing() {
   useEffect(() => {
     if (batchRenderData && batchRenderData.length > 0) {
       const generateImages = async () => {
-        await new Promise(resolve => setTimeout(resolve, 3000)); // เผื่อเวลาให้ Base64 โหลดทุกบิล
-        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
         const zip = new JSZip();
-        const folderName = activeTab === 'tutor' ? `Payslips_${selectedMonth}` : `Invoices_${selectedMonth}`;
+        // แนบนามสกุลที่เลือกไว้ในชื่อโฟลเดอร์ให้ชัดเจน
+        const formatSuffix = batchFormat.toUpperCase();
+        const folderName = activeTab === 'tutor' ? `Payslips_${selectedMonth}_${formatSuffix}` : `Invoices_${selectedMonth}_${formatSuffix}`;
         const imgFolder = zip.folder(folderName);
-        
+
         for (const userData of batchRenderData) {
           const el = document.getElementById(`batch-slip-${userData.user.id}`);
           if (el) {
@@ -271,26 +281,42 @@ export default function Billing() {
                 pixelRatio: 2,
                 style: { overflow: 'visible', margin: '0' }
               };
-              
-              // 🔴 ถ่ายล่อ 1 ครั้ง (Warmup ให้ Safari)
+
+              // ถ่ายล่อ 1 ครั้ง (Warmup ให้ Safari)
               await toPng(el, captureOptions);
               await new Promise(resolve => setTimeout(resolve, 300));
-              
-              // 🔴 ถ่ายจริงเป็นไฟล์ PNG
+
+              // ถ่ายจริง
               const dataUrl = await toPng(el, captureOptions);
-              const base64Data = dataUrl.split(',')[1];
-              
               const prefix = activeTab === 'tutor' ? 'Payslip' : 'Invoice';
-              // 🔴 เซฟนามสกุลเป็น png ลงใน zip
-              const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.png`;
-              
-              imgFolder.file(fileName, base64Data, { base64: true });
+
+              // 🔴 4. แยกสายบันทึกข้อมูล ระหว่าง PDF และ PNG เพื่อจัดลง ZIP
+              if (batchFormat === 'pdf') {
+                const pdf = new jsPDF({
+                  orientation: 'portrait',
+                  unit: 'mm',
+                  format: 'a4',
+                });
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (el.scrollHeight * pdfWidth) / el.scrollWidth;
+
+                pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                const pdfBuffer = pdf.output('arraybuffer'); // ได้เป็น ArrayBuffer ยัดลงไฟล์ ZIP ได้เลย
+
+                const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.pdf`;
+                imgFolder.file(fileName, pdfBuffer);
+              } else {
+                const base64Data = dataUrl.split(',')[1];
+                const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.png`;
+                imgFolder.file(fileName, base64Data, { base64: true });
+              }
+
             } catch (e) {
-              console.error('Error generating image for', userData.user.username, e);
+              console.error('Error generating file for', userData.user.username, e);
             }
           }
         }
-        
+
         try {
           const content = await zip.generateAsync({ type: 'blob' });
           saveAs(content, `${folderName}.zip`);
@@ -299,14 +325,14 @@ export default function Billing() {
           console.error('Error creating ZIP:', err);
           alert('เกิดข้อผิดพลาดในการสร้างไฟล์ ZIP');
         }
-        
+
         setBatchRenderData(null);
         setIsBatchDownloading(false);
       };
-      
+
       generateImages();
     }
-  }, [batchRenderData, activeTab, selectedMonth]);
+  }, [batchRenderData, activeTab, selectedMonth, batchFormat]);
 
   return (
     <div className="max-w-6xl mx-auto pb-20 relative">
@@ -315,29 +341,40 @@ export default function Billing() {
         <p className="text-gray-500 mt-1">สรุปยอดชั่วโมงการสอนและคำนวณค่าตอบแทน/ค่าเรียนอัตโนมัติ</p>
       </div>
 
-      <div className="flex justify-between items-center border-b border-gray-200 mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 mb-6 gap-4 pb-4 md:pb-0">
         <div className="flex">
           <button onClick={() => setActiveTab('tutor')} className={`py-3 px-6 font-bold text-sm border-b-2 transition-colors ${activeTab === 'tutor' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>สรุปค่าตอบแทนคุณครู</button>
           <button onClick={() => setActiveTab('student')} className={`py-3 px-6 font-bold text-sm border-b-2 transition-colors ${activeTab === 'student' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>สรุปค่าเรียนนักเรียน</button>
         </div>
-        
-        <button 
-          onClick={handleBatchDownload} 
-          disabled={isBatchDownloading}
-          className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center space-x-2 transition-all shadow-sm ${activeTab === 'tutor' ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'} disabled:opacity-50`}
-        >
-          {isBatchDownloading ? (
-            <>
-              <svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              <span>กำลังประมวลผล...</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              <span>โหลดบิล{activeTab === 'tutor' ? 'ครู' : 'เด็ก'}ทั้งหมด (ZIP)</span>
-            </>
-          )}
-        </button>
+
+        {/* 🔴 5. เปลี่ยนปุ่มโหลดเป็น 2 ปุ่ม (PDF และ PNG) */}
+        <div className="flex items-center gap-2 mb-2 md:mb-0">
+          <span className="text-xs font-bold text-gray-500 mr-1 hidden lg:block">โหลดบิลทั้งหมด:</span>
+
+          <button
+            onClick={() => handleBatchDownload('pdf')}
+            disabled={isBatchDownloading}
+            className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center space-x-2 transition-all shadow-sm bg-rose-100 text-rose-700 hover:bg-rose-200 disabled:opacity-50`}
+          >
+            {isBatchDownloading && batchFormat === 'pdf' ? (
+              <><svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>ประมวลผล...</span></>
+            ) : (
+              <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><span>ZIP (PDF)</span></>
+            )}
+          </button>
+
+          <button
+            onClick={() => handleBatchDownload('png')}
+            disabled={isBatchDownloading}
+            className={`py-2 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center space-x-2 transition-all shadow-sm ${activeTab === 'tutor' ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'} disabled:opacity-50`}
+          >
+            {isBatchDownloading && batchFormat === 'png' ? (
+              <><svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>ประมวลผล...</span></>
+            ) : (
+              <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg><span>ZIP (PNG)</span></>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -349,12 +386,12 @@ export default function Billing() {
                 <label className="block text-xs font-bold text-gray-600 mb-1">ประจำเดือน</label>
                 <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
               </div>
-              
+
               <div className="relative">
                 <label className="block text-xs font-bold text-gray-600 mb-1">ค้นหา {activeTab === 'tutor' ? 'คุณครู' : 'นักเรียน'}</label>
-                <input 
-                  type="text" 
-                  placeholder="พิมพ์ Username หรือคลิกเพื่อเลือก..." 
+                <input
+                  type="text"
+                  placeholder="พิมพ์ Username หรือคลิกเพื่อเลือก..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setShowDropdown(true); }}
                   onFocus={() => setShowDropdown(true)}
@@ -438,7 +475,7 @@ export default function Billing() {
                     <table className="w-full text-left text-sm border-collapse table-auto">
                       <thead className="bg-gray-100 text-gray-600 border-b-2 border-gray-200">
                         <tr>
-                          <th className="p-3 w-10"></th> 
+                          <th className="p-3 w-10"></th>
                           <th className="p-3 font-bold whitespace-nowrap">จำนวน</th>
                           <th className="p-3 font-bold">{activeTab === 'tutor' ? 'สอนนักเรียน' : 'สอนโดยคุณครู'}</th>
                           <th className="p-3 font-bold">วิชา / คอร์ส</th>
@@ -458,8 +495,8 @@ export default function Billing() {
                               <td className="p-3 whitespace-nowrap font-bold text-indigo-600">{group.sessions.length} ครั้ง</td>
                               <td className="p-3 font-bold text-gray-900">{group.users?.name || group.users?.username}</td>
                               <td className="p-3">
-                                {group.learning_type === 'course' ? <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">🏆 {group.custom_courses?.course_name}</span> : 
-                                <div className="flex items-center gap-1.5"><span className={`text-[10px] px-1 rounded font-bold ${group.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{group.learning_type === 'advanced' ? 'Adv' : 'Gen'}</span><span className="text-gray-800 font-medium">{group.subjects?.subject_name}</span></div>}
+                                {group.learning_type === 'course' ? <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">🏆 {group.custom_courses?.course_name}</span> :
+                                  <div className="flex items-center gap-1.5"><span className={`text-[10px] px-1 rounded font-bold ${group.learning_type === 'advanced' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{group.learning_type === 'advanced' ? 'Adv' : 'Gen'}</span><span className="text-gray-800 font-medium">{group.subjects?.subject_name}</span></div>}
                               </td>
                               <td className="p-3 text-gray-600">{group.grade || '-'}</td>
                               <td className="p-3 text-center font-black text-gray-800">{group.total_duration}</td>
@@ -477,7 +514,7 @@ export default function Billing() {
                                     </div>
                                   </td>
                                   <td className="p-2.5 text-center font-bold text-gray-700">
-                                    {session.duration_hours} 
+                                    {session.duration_hours}
                                     {session.roundsForDisplay && <span className="block text-[10px] text-emerald-600">({session.roundsForDisplay} รอบ)</span>}
                                   </td>
                                   <td className="p-2.5 text-right text-gray-400 text-xs">฿{session.ratePerHour}</td>
@@ -508,8 +545,8 @@ export default function Billing() {
         </div>
       </div>
 
-      <StudentInvoiceModal 
-        isOpen={showInvoiceModal} 
+      <StudentInvoiceModal
+        isOpen={showInvoiceModal}
         onClose={() => setShowInvoiceModal(false)}
         student={selectedUserDetails}
         logs={logsWithCalculation}
@@ -518,8 +555,8 @@ export default function Billing() {
         companyAccount={selectedAccountDetails}
       />
 
-      <TutorPayslipModal 
-        isOpen={showTutorModal} 
+      <TutorPayslipModal
+        isOpen={showTutorModal}
         onClose={() => setShowTutorModal(false)}
         tutor={selectedUserDetails}
         logs={logsWithCalculation}
@@ -530,27 +567,27 @@ export default function Billing() {
       {batchRenderData && (
         <div className="absolute top-[-9999px] left-[-9999px] z-[-1] opacity-0 pointer-events-none">
           {batchRenderData.map(userData => (
-            <div 
-              key={userData.user.id} 
-              id={`batch-slip-${userData.user.id}`} 
+            <div
+              key={userData.user.id}
+              id={`batch-slip-${userData.user.id}`}
               className="w-[210mm] bg-white p-1"
             >
               {activeTab === 'tutor' ? (
-                <TutorPayslip 
-                  tutor={userData.user} 
-                  logs={userData.logs} 
-                  totalAmount={userData.totalAmount} 
-                  billingMonth={selectedMonth} 
+                <TutorPayslip
+                  tutor={userData.user}
+                  logs={userData.logs}
+                  totalAmount={userData.totalAmount}
+                  billingMonth={selectedMonth}
                 />
               ) : (
-                <StudentInvoice 
-                  student={userData.user} 
-                  logs={userData.logs} 
-                  totalAmount={userData.totalAmount} 
-                  billingMonth={selectedMonth} 
+                <StudentInvoice
+                  student={userData.user}
+                  logs={userData.logs}
+                  totalAmount={userData.totalAmount}
+                  billingMonth={selectedMonth}
                   companyAccount={
-                    companyAccounts.find(acc => acc.id === userData.user.company_account_id) || 
-                    companyAccounts.find(acc => acc.id === selectedAccountId) || 
+                    companyAccounts.find(acc => acc.id === userData.user.company_account_id) ||
+                    companyAccounts.find(acc => acc.id === selectedAccountId) ||
                     companyAccounts[0]
                   }
                 />
