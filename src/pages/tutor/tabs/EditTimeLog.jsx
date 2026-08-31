@@ -22,7 +22,7 @@ export default function EditTimeLog() {
   const [subjectsList, setSubjectsList] = useState([]);
   const [pricingRates, setPricingRates] = useState([]);
 
-  const gradeOptions = ['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6', 'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6'];
+  const gradeOptions = ['ป.1', 'ป.2', 'ป.3', 'ป.4', 'ป.5', 'ป.6', 'ม.1', 'ม.2', 'ม.3', 'ม.4', 'ม.5', 'ม.6', 'ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
