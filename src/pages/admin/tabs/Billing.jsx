@@ -268,7 +268,10 @@ export default function Billing() {
       }
     });
 
-    const preparedData = Object.values(userGroups).filter(g => g.logs.length > 0);
+    const preparedData = Object.values(userGroups)
+      .filter(g => g.logs.length > 0)
+      .sort((a, b) => a.user.username.localeCompare(b.user.username, undefined, { numeric: true, sensitivity: 'base' }));
+
     if (preparedData.length === 0) {
       alert('ไม่มีข้อมูลในเดือนนี้');
       setIsBatchDownloading(false);
