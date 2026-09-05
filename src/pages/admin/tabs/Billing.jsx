@@ -243,9 +243,26 @@ export default function Billing() {
       if (userGroups[keyId]) {
         const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
         const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
-        const amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+        
+        let amount = 0;
+        let roundsForDisplay = null;
+        const isClassroom = (activeTab === 'student' && log.users?.username === 'Classroom') || (activeTab === 'tutor' && userGroups[keyId].user.username === 'Classroom');
 
-        const processedLog = { ...log, grade, ratePerHour, amount };
+        if (isClassroom) {
+          let rounds = 1;
+          const courseName = log.custom_courses?.course_name || '';
+          const match = courseName.match(/\(([\d.]+) ชม\.\/รอบ/);
+
+          if (match) {
+            rounds = Number(log.duration_hours) / Number(match[1]);
+            roundsForDisplay = rounds;
+          }
+          amount = Math.round(rounds * ratePerHour * 100) / 100;
+        } else {
+          amount = Math.round(Number(log.duration_hours) * ratePerHour * 100) / 100;
+        }
+
+        const processedLog = { ...log, grade, ratePerHour, amount, roundsForDisplay };
         userGroups[keyId].logs.push(processedLog);
         userGroups[keyId].totalAmount += amount;
       }
@@ -272,6 +289,8 @@ export default function Billing() {
         const folderName = activeTab === 'tutor' ? `Payslips_${selectedMonth}_${formatSuffix}` : `Invoices_${selectedMonth}_${formatSuffix}`;
         const imgFolder = zip.folder(folderName);
 
+        let singlePdf = null;
+
         for (const userData of batchRenderData) {
           const el = document.getElementById(`batch-slip-${userData.user.id}`);
           if (el) {
@@ -292,19 +311,20 @@ export default function Billing() {
 
               // 🔴 4. แยกสายบันทึกข้อมูล ระหว่าง PDF และ PNG เพื่อจัดลง ZIP
               if (batchFormat === 'pdf') {
-                const pdf = new jsPDF({
-                  orientation: 'portrait',
-                  unit: 'mm',
-                  format: 'a4',
-                });
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = (el.scrollHeight * pdfWidth) / el.scrollWidth;
+                const elWidth = el.scrollWidth;
+                const elHeight = el.scrollHeight;
 
-                pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                const pdfBuffer = pdf.output('arraybuffer'); // ได้เป็น ArrayBuffer ยัดลงไฟล์ ZIP ได้เลย
-
-                const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.pdf`;
-                imgFolder.file(fileName, pdfBuffer);
+                if (!singlePdf) {
+                  singlePdf = new jsPDF({
+                    orientation: elWidth > elHeight ? 'landscape' : 'portrait',
+                    unit: 'px',
+                    format: [elWidth, elHeight],
+                  });
+                  singlePdf.addImage(dataUrl, 'PNG', 0, 0, elWidth, elHeight);
+                } else {
+                  singlePdf.addPage([elWidth, elHeight], elWidth > elHeight ? 'landscape' : 'portrait');
+                  singlePdf.addImage(dataUrl, 'PNG', 0, 0, elWidth, elHeight);
+                }
               } else {
                 const base64Data = dataUrl.split(',')[1];
                 const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.png`;
@@ -318,12 +338,19 @@ export default function Billing() {
         }
 
         try {
-          const content = await zip.generateAsync({ type: 'blob' });
-          saveAs(content, `${folderName}.zip`);
-          alert(`ดาวน์โหลดไฟล์ ${folderName}.zip เรียบร้อยแล้ว!`);
+          if (batchFormat === 'pdf' && singlePdf) {
+            singlePdf.save(`${folderName}.pdf`);
+            alert(`ดาวน์โหลดไฟล์ ${folderName}.pdf เรียบร้อยแล้ว!`);
+          } else if (batchFormat === 'png') {
+            const content = await zip.generateAsync({ type: 'blob' });
+            saveAs(content, `${folderName}.zip`);
+            alert(`ดาวน์โหลดไฟล์ ${folderName}.zip เรียบร้อยแล้ว!`);
+          } else if (batchFormat === 'pdf' && !singlePdf) {
+            alert('ไม่สามารถสร้างไฟล์ PDF ได้ ไม่มีข้อมูล');
+          }
         } catch (err) {
-          console.error('Error creating ZIP:', err);
-          alert('เกิดข้อผิดพลาดในการสร้างไฟล์ ZIP');
+          console.error('Error creating file:', err);
+          alert('เกิดข้อผิดพลาดในการสร้างไฟล์');
         }
 
         setBatchRenderData(null);
@@ -359,7 +386,7 @@ export default function Billing() {
             {isBatchDownloading && batchFormat === 'pdf' ? (
               <><svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>ประมวลผล...</span></>
             ) : (
-              <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><span>ZIP (PDF)</span></>
+              <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><span>PDF (รวมไฟล์)</span></>
             )}
           </button>
 
