@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageParentChildren() {
@@ -28,7 +28,7 @@ export default function ManageParentChildren() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const [parentsRes, studentsRes, mappingsRes] = await Promise.all([
       // ดึงรายชื่อผู้ใช้ที่เป็นผู้ปกครอง (role: parent)
@@ -48,14 +48,20 @@ export default function ManageParentChildren() {
     if (studentsRes.data) setStudents(studentsRes.data);
     if (mappingsRes.data) setMappings(mappingsRes.data);
     setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchData();
   }, []);
 
-  // เมื่อ Admin เลือกผู้ปกครอง ให้ไปดึงรายชื่อลูกปัจจุบันของเขามาติ๊กค้างไว้ในฟอร์มอัตโนมัติ
   useEffect(() => {
+    const load = async () => { await fetchData(); };
+    load();
+  }, [fetchData]);
+
+  // เมื่อ Admin เลือกผู้ปกครอง ให้ไปดึงรายชื่อลูกปัจจุบันของเขามาติ๊กค้างไว้ในฟอร์มอัตโนมัติ
+  // (ปรับ state ระหว่าง render ทุกครั้งที่ selectedParentId หรือ mappings เปลี่ยน แทนการใช้ useEffect)
+  const [prevSelectedParentId, setPrevSelectedParentId] = useState();
+  const [prevMappings, setPrevMappings] = useState();
+  if (selectedParentId !== prevSelectedParentId || mappings !== prevMappings) {
+    setPrevSelectedParentId(selectedParentId);
+    setPrevMappings(mappings);
     if (selectedParentId) {
       const currentChildrenIds = mappings
         .filter(m => m.parent_id === selectedParentId)
@@ -64,7 +70,7 @@ export default function ManageParentChildren() {
     } else {
       setSelectedStudentIds([]);
     }
-  }, [selectedParentId, mappings]);
+  }
 
   // ตัวกรองค้นหานักเรียน (Autocomplete Search)
   const filteredStudents = useMemo(() => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 import AddStudentModal from '../modals/AddStudentModal';
 import EditStudentInfoModal from '../modals/EditStudentInfoModal';
@@ -27,7 +27,7 @@ export default function ManageStudent() {
 
   const debounceRef = useRef(null);
 
-  const fetchStudents = async () => {
+  const fetchStudents = useCallback(async () => {
     setLoading(true);
     const from = (currentPage - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
@@ -58,7 +58,7 @@ export default function ManageStudent() {
       setTotalPages(Math.ceil(count / ITEMS_PER_PAGE) || 1);
     }
     setLoading(false);
-  };
+  }, [currentPage, searchTerm, sortOrder]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -69,7 +69,7 @@ export default function ManageStudent() {
     }, delay);
 
     return () => clearTimeout(debounceRef.current);
-  }, [currentPage, searchTerm, sortOrder]);
+  }, [fetchStudents, searchTerm]);
 
   const handleCloseAddModal = () => {
     setShowAddModal(false);

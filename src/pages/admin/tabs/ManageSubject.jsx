@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageSubject() {
@@ -16,7 +16,7 @@ export default function ManageSubject() {
   
 
   // 🔴 2. อัปเกรดฟังก์ชันดึงข้อมูลให้รองรับการค้นหาและแบ่งหน้า
-  const fetchSubjects = async () => {
+  const fetchSubjects = useCallback(async () => {
     setLoading(true);
     const from = (currentPage - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
@@ -38,23 +38,20 @@ export default function ManageSubject() {
       setTotalPages(Math.ceil(count / ITEMS_PER_PAGE) || 1);
     }
     setLoading(false);
-  };
+  }, [currentPage, searchTerm]);
 
   // 🔴 3. เพิ่มระบบหน่วงเวลา (Debounce) สำหรับช่องค้นหา
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  useEffect(() => {
     if (searchTerm === '') {
-      fetchSubjects();
+      const load = async () => { await fetchSubjects(); };
+      load();
     } else {
       const delayDebounceFn = setTimeout(() => {
         fetchSubjects();
       }, 500);
       return () => clearTimeout(delayDebounceFn);
     }
-  }, [currentPage, searchTerm]);
+  }, [fetchSubjects, searchTerm]);
 
   const handleAddSubject = async (e) => {
     e.preventDefault();
@@ -106,7 +103,7 @@ export default function ManageSubject() {
               type="text"
               placeholder="ค้นหารายวิชา..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-full text-sm"
             />
         </div>

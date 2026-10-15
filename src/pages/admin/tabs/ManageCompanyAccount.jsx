@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageCompanyAccount() {
@@ -16,7 +16,7 @@ export default function ManageCompanyAccount() {
   // 🔴 1. เพิ่ม State เพื่อเช็คว่ากำลังอยู่ในโหมดแก้ไขบัญชีไหน
   const [editingAccountId, setEditingAccountId] = useState(null);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('company_accounts')
@@ -25,11 +25,12 @@ export default function ManageCompanyAccount() {
 
     if (!error && data) setAccounts(data);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchAccounts();
-  }, []);
+    const load = async () => { await fetchAccounts(); };
+    load();
+  }, [fetchAccounts]);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {

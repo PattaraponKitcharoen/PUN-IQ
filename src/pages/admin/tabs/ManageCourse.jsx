@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageCourse() {
@@ -65,7 +65,10 @@ export default function ManageCourse() {
     fetchData();
   }, []);
 
-  useEffect(() => {
+  // เมื่อเปลี่ยนครู: ล้างค่าในฟอร์มระหว่าง render (แทนการ setState ใน useEffect)
+  const [prevSelectedTutorId, setPrevSelectedTutorId] = useState();
+  if (selectedTutorId !== prevSelectedTutorId) {
+    setPrevSelectedTutorId(selectedTutorId);
     if (!selectedTutorId) {
       setAssignedStudentIds([]);
       setAssignedGroupIds([]);
@@ -73,8 +76,13 @@ export default function ManageCourse() {
       setInitialGroupIds([]);
       setGroupFilter('all');     // ล้างค่าตัวกรองกลับสู่ค่าเริ่มต้นเมื่อเปลี่ยนครู
       setStudentFilter('all');
-      return;
+    } else {
+      setMessage('');
     }
+  }
+
+  useEffect(() => {
+    if (!selectedTutorId) return;
 
     const fetchMappings = async () => {
       setLoadingMapping(true);
@@ -98,7 +106,6 @@ export default function ManageCourse() {
     };
 
     fetchMappings();
-    setMessage('');
   }, [selectedTutorId]);
 
   const filteredTutors = useMemo(() => {

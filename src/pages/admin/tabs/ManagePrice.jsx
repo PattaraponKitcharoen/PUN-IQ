@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 const ALL_GRADES = [
@@ -15,11 +15,7 @@ export default function ManagePrice() {
 
   const [activeTab, setActiveTab] = useState('General');
 
-  useEffect(() => {
-    fetchRates();
-  }, []);
-
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('pricing_rates')
@@ -50,7 +46,12 @@ export default function ManagePrice() {
       setRates(completeRates);
     }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    const load = async () => { await fetchRates(); };
+    load();
+  }, [fetchRates]);
 
   const handleRateChange = (id, field, value) => {
     setRates(prevRates => prevRates.map(rate =>

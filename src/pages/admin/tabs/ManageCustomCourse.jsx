@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageCustomCourse() {
@@ -37,7 +37,7 @@ export default function ManageCustomCourse() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const [
       { data: coursesData },
@@ -71,11 +71,12 @@ export default function ManageCustomCourse() {
     if (tutorsData) setTutors(tutorsData);
     if (groupsData) setGroups(groupsData);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const load = async () => { await fetchData(); };
+    load();
+  }, [fetchData]);
 
   const filteredTutors = useMemo(() => {
     if (!tutorSearchTerm) return tutors;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function Dashboard() {
@@ -35,139 +35,139 @@ export default function Dashboard() {
 
   // 🔴 2. ให้ดึงข้อมูลใหม่ทุกครั้งที่เดือนเปลี่ยน
   useEffect(() => {
+    const fetchStats = async () => {
+      setLoadingStats(true);
+    
+      // 🔴 3. คำนวณวันแรกและวันสุดท้ายจาก selectedMonth
+      const [year, month] = selectedMonth.split('-');
+      const startDate = `${year}-${month}-01`;
+      const lastDay = new Date(Number(year), Number(month), 0).getDate();
+      const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+    
+      const [
+        { count: studentCount },
+        { count: tutorCount },
+        { count: groupCount },
+        { data: logsData }
+      ] = await Promise.all([
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'tutor').neq('username', 'Classroom'),
+        supabase.from('groups').select('*', { count: 'exact', head: true }),
+        supabase.from('teaching_logs')
+          .select('duration_hours, applied_student_rate, applied_tutor_rate, topic, users!teaching_logs_student_id_fkey(name, username), tutor:users!teaching_logs_tutor_id_fkey(name, username), custom_courses(course_name)')
+          .gte('teaching_date', startDate)
+          .lte('teaching_date', endDate)
+      ]);
+
+      let totalHours = 0;
+      let totalTeachingRev = 0; 
+      let totalExp = 0;
+      let totalRoomRental = 0; 
+      let revMap = {};
+      let expMap = {};
+      let roomMap = {}; 
+
+      if (logsData) {
+        logsData.forEach(log => {
+          const hrs = Number(log.duration_hours) || 0;
+          const studentName = log.users?.name || log.users?.username || 'ไม่ระบุชื่อ';
+
+          if (log.tutor?.username === 'Classroom') {
+            let roomRate = Number(log.applied_student_rate) || 0;
+            let rounds = 1;
+            const courseName = log.custom_courses?.course_name || '';
+          
+            const match = courseName.match(/([\d.]+)\s*ชม\.\/รอบ/);
+            if (match) {
+              const hrsPerRound = Number(match[1]);
+              rounds = hrs / hrsPerRound; 
+            }
+          
+            const rev = rounds * roomRate; 
+            totalRoomRental += rev;
+
+            if (!roomMap[studentName]) roomMap[studentName] = 0;
+            roomMap[studentName] += rev;
+          } else {
+            const rev = hrs * (Number(log.applied_student_rate) || 0);
+            const exp = hrs * (Number(log.applied_tutor_rate) || 0);
+
+            totalHours += hrs;
+            totalTeachingRev += rev; 
+            totalExp += exp;
+
+            if (!revMap[studentName]) revMap[studentName] = 0;
+            revMap[studentName] += rev;
+
+            const tutorName = log.tutor?.name || log.tutor?.username || 'ไม่ระบุชื่อครู';
+            if (!expMap[tutorName]) expMap[tutorName] = 0;
+            expMap[tutorName] += exp;
+          }
+        });
+      }
+
+      const revArray = Object.keys(revMap).map(name => ({ name, amount: revMap[name] })).sort((a,b) => b.amount - a.amount);
+      const expArray = Object.keys(expMap).map(name => ({ name, amount: expMap[name] })).sort((a,b) => b.amount - a.amount);
+      const roomArray = Object.keys(roomMap).map(name => ({ name, amount: roomMap[name] })).sort((a,b) => b.amount - a.amount);
+
+      const teachingProfit = totalTeachingRev - totalExp;
+      const finalProfit = teachingProfit + totalRoomRental; 
+
+      setBreakdownData({ revenue: revArray, expense: expArray, roomRevenue: roomArray });
+      setFinancialStats({ 
+        revenue: totalTeachingRev, 
+        expense: totalExp, 
+        teachingProfit: teachingProfit, 
+        roomRevenue: totalRoomRental,
+        profit: finalProfit
+      });
+
+      setStats({
+        totalStudents: studentCount || 0,
+        totalTutors: tutorCount || 0,
+        totalGroups: groupCount || 0,
+        thisMonthHours: totalHours
+      });
+      setLoadingStats(false);
+    };
+
     if (selectedMonth) {
       fetchStats(); 
     }
   }, [selectedMonth]);
 
   useEffect(() => {
+    const fetchRecentLogs = async (page) => {
+      setLoadingLogs(true);
+      const from = (page - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE; 
+
+      // 🔴 4. เพิ่มเงื่อนไขกรองเดือนสำหรับตารางด้วย
+      const [year, month] = selectedMonth.split('-');
+      const startDate = `${year}-${month}-01`;
+      const lastDay = new Date(Number(year), Number(month), 0).getDate();
+      const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+
+      const { data } = await supabase
+        .from('teaching_logs')
+        .select('*, users!teaching_logs_student_id_fkey(name, username), tutor:users!teaching_logs_tutor_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
+        .gte('teaching_date', startDate)
+        .lte('teaching_date', endDate)
+        .order('teaching_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (data) {
+        setHasMoreLogs(data.length > ITEMS_PER_PAGE); 
+        setRecentLogs(data.slice(0, ITEMS_PER_PAGE)); 
+      }
+      setLoadingLogs(false);
+    };
+
     if (selectedMonth) {
       fetchRecentLogs(currentPage); 
     }
   }, [currentPage, selectedMonth]);
-
-  const fetchStats = async () => {
-    setLoadingStats(true);
-    
-    // 🔴 3. คำนวณวันแรกและวันสุดท้ายจาก selectedMonth
-    const [year, month] = selectedMonth.split('-');
-    const startDate = `${year}-${month}-01`;
-    const lastDay = new Date(Number(year), Number(month), 0).getDate();
-    const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
-    
-    const [
-      { count: studentCount },
-      { count: tutorCount },
-      { count: groupCount },
-      { data: logsData }
-    ] = await Promise.all([
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'tutor').neq('username', 'Classroom'),
-      supabase.from('groups').select('*', { count: 'exact', head: true }),
-      supabase.from('teaching_logs')
-        .select('duration_hours, applied_student_rate, applied_tutor_rate, topic, users!teaching_logs_student_id_fkey(name, username), tutor:users!teaching_logs_tutor_id_fkey(name, username), custom_courses(course_name)')
-        .gte('teaching_date', startDate)
-        .lte('teaching_date', endDate)
-    ]);
-
-    let totalHours = 0;
-    let totalTeachingRev = 0; 
-    let totalExp = 0;
-    let totalRoomRental = 0; 
-    let revMap = {};
-    let expMap = {};
-    let roomMap = {}; 
-
-    if (logsData) {
-      logsData.forEach(log => {
-        const hrs = Number(log.duration_hours) || 0;
-        const studentName = log.users?.name || log.users?.username || 'ไม่ระบุชื่อ';
-
-        if (log.tutor?.username === 'Classroom') {
-          let roomRate = Number(log.applied_student_rate) || 0;
-          let rounds = 1;
-          const courseName = log.custom_courses?.course_name || '';
-          
-          const match = courseName.match(/([\d.]+)\s*ชม\.\/รอบ/);
-          if (match) {
-            const hrsPerRound = Number(match[1]);
-            rounds = hrs / hrsPerRound; 
-          }
-          
-          const rev = rounds * roomRate; 
-          totalRoomRental += rev;
-
-          if (!roomMap[studentName]) roomMap[studentName] = 0;
-          roomMap[studentName] += rev;
-        } else {
-          const rev = hrs * (Number(log.applied_student_rate) || 0);
-          const exp = hrs * (Number(log.applied_tutor_rate) || 0);
-
-          totalHours += hrs;
-          totalTeachingRev += rev; 
-          totalExp += exp;
-
-          if (!revMap[studentName]) revMap[studentName] = 0;
-          revMap[studentName] += rev;
-
-          const tutorName = log.tutor?.name || log.tutor?.username || 'ไม่ระบุชื่อครู';
-          if (!expMap[tutorName]) expMap[tutorName] = 0;
-          expMap[tutorName] += exp;
-        }
-      });
-    }
-
-    const revArray = Object.keys(revMap).map(name => ({ name, amount: revMap[name] })).sort((a,b) => b.amount - a.amount);
-    const expArray = Object.keys(expMap).map(name => ({ name, amount: expMap[name] })).sort((a,b) => b.amount - a.amount);
-    const roomArray = Object.keys(roomMap).map(name => ({ name, amount: roomMap[name] })).sort((a,b) => b.amount - a.amount);
-
-    const teachingProfit = totalTeachingRev - totalExp;
-    const finalProfit = teachingProfit + totalRoomRental; 
-
-    setBreakdownData({ revenue: revArray, expense: expArray, roomRevenue: roomArray });
-    setFinancialStats({ 
-      revenue: totalTeachingRev, 
-      expense: totalExp, 
-      teachingProfit: teachingProfit, 
-      roomRevenue: totalRoomRental,
-      profit: finalProfit
-    });
-
-    setStats({
-      totalStudents: studentCount || 0,
-      totalTutors: tutorCount || 0,
-      totalGroups: groupCount || 0,
-      thisMonthHours: totalHours
-    });
-    setLoadingStats(false);
-  };
-
-  const fetchRecentLogs = async (page) => {
-    setLoadingLogs(true);
-    const from = (page - 1) * ITEMS_PER_PAGE;
-    const to = from + ITEMS_PER_PAGE; 
-
-    // 🔴 4. เพิ่มเงื่อนไขกรองเดือนสำหรับตารางด้วย
-    const [year, month] = selectedMonth.split('-');
-    const startDate = `${year}-${month}-01`;
-    const lastDay = new Date(Number(year), Number(month), 0).getDate();
-    const endDate = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
-
-    const { data } = await supabase
-      .from('teaching_logs')
-      .select('*, users!teaching_logs_student_id_fkey(name, username), tutor:users!teaching_logs_tutor_id_fkey(name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
-      .gte('teaching_date', startDate)
-      .lte('teaching_date', endDate)
-      .order('teaching_date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    if (data) {
-      setHasMoreLogs(data.length > ITEMS_PER_PAGE); 
-      setRecentLogs(data.slice(0, ITEMS_PER_PAGE)); 
-    }
-    setLoadingLogs(false);
-  };
 
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 

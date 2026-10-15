@@ -22,12 +22,16 @@ export default function EditStudentAccountModal({ isOpen, onClose, student, onSu
   }, [isOpen]);
 
   // ดึงค่าบัญชีเดิมที่เคยเลือกไว้มาแสดง
-  useEffect(() => {
+  const [prevStudent, setPrevStudent] = useState();
+  const [prevIsOpen, setPrevIsOpen] = useState();
+  if (student !== prevStudent || isOpen !== prevIsOpen) {
+    setPrevStudent(student);
+    setPrevIsOpen(isOpen);
     if (student) {
       setCompanyAccountId(student.company_account_id || '');
       setError('');
     }
-  }, [student, isOpen]);
+  }
 
   if (!isOpen || !student) return null;
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageGroup() {
@@ -20,7 +20,7 @@ export default function ManageGroup() {
   const [message, setMessage] = useState('');
 
   // 🚀 โหลดข้อมูลแบบคู่ขนาน (Promise.all) ดึงมาทั้งหมดเลย ไม่ต้องดักช่วงหน้าแล้ว
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoadingInitial(true);
 
     let groupQuery = supabase.from('groups').select('*');
@@ -40,26 +40,34 @@ export default function ManageGroup() {
     if (studentsData) setStudents(studentsData);
     
     setLoadingInitial(false);
-  };
+  }, [searchTerm]);
 
   // ดักฟังแค่ตอนพิมพ์ค้นหากลุ่ม (ใช้ Debounce ช่วยหน่วงเวลา)
   useEffect(() => {
     if (searchTerm === '') {
-      fetchData();
+      const load = async () => { await fetchData(); };
+      load();
     } else {
       const delayDebounceFn = setTimeout(() => {
         fetchData();
       }, 500);
       return () => clearTimeout(delayDebounceFn);
     }
-  }, [searchTerm]);
+  }, [fetchData, searchTerm]);
 
-  useEffect(() => {
-    if (!selectedGroupId) {
+  // เปลี่ยนกลุ่มที่เลือก: ถ้าไม่ได้เลือกกลุ่มให้ล้างรายชื่อ ถ้าเลือกกลุ่มให้ล้างข้อความแจ้งเตือน
+  const selectGroup = (groupId) => {
+    setSelectedGroupId(groupId);
+    if (!groupId) {
       setAssignedStudentIds([]);
       setInitialAssignedIds([]);
-      return;
+    } else {
+      setMessage('');
     }
+  };
+
+  useEffect(() => {
+    if (!selectedGroupId) return;
 
     const fetchGroupMembers = async () => {
       setLoadingMapping(true);
@@ -77,7 +85,6 @@ export default function ManageGroup() {
     };
 
     fetchGroupMembers();
-    setMessage('');
   }, [selectedGroupId]);
 
   const handleToggleStudent = (studentId) => {
@@ -149,7 +156,7 @@ export default function ManageGroup() {
       const { error } = await supabase.from('groups').delete().eq('id', selectedGroupId);
       if (error) throw new Error(error.message);
       setMessage('🗑️ ลบกลุ่มเรียบร้อยแล้ว!');
-      setSelectedGroupId('');
+      selectGroup('');
       fetchData();
     } catch (error) {
       setMessage(`❌ เกิดข้อผิดพลาดในการลบกลุ่ม: ${error.message}`);
@@ -225,7 +232,7 @@ export default function ManageGroup() {
           
           <select
             value={selectedGroupId}
-            onChange={(e) => setSelectedGroupId(e.target.value)}
+            onChange={(e) => selectGroup(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 bg-gray-50 font-medium"
           >
             <option value="">-- {groups.length === 0 ? 'ไม่พบกลุ่มเรียน' : 'กรุณาเลือกกลุ่ม'} --</option>

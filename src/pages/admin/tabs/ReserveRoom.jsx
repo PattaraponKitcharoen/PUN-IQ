@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ReserveRoom() {
@@ -32,27 +32,9 @@ export default function ReserveRoom() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const [studentsRes, tutorRes] = await Promise.all([
-      supabase.from('users').select('id, name, username, grade').eq('role', 'student').order('username'),
-      supabase.from('users').select('id').eq('username', 'Classroom').single() 
-    ]);
-
-    if (studentsRes.data) setStudents(studentsRes.data);
-    
-    if (tutorRes.data) {
-      setDummyTutorId(tutorRes.data.id);
-      fetchRoomPackages(tutorRes.data.id); 
-    } else {
-      setMessage('⚠️ ไม่พบบัญชีคุณครู "Classroom" ในระบบ กรุณาสร้างไอดีนี้ก่อนใช้งาน');
-      setLoading(false);
-    }
-  };
-
   // 🔴 1. ปรับปรุงการอ่านข้อมูลสิทธิ์ห้องเช่าผ่านตารางเชื่อม Many-to-Many
-  const fetchRoomPackages = async (tutorId) => {
-    const { data, error } = await supabase.from('custom_courses')
+  const fetchRoomPackages = useCallback(async (tutorId) => {
+    const { data } = await supabase.from('custom_courses')
       .select(`
         *, 
         student:users!custom_courses_student_id_fkey(name, username),
@@ -63,11 +45,29 @@ export default function ReserveRoom() {
       
     if (data) setRoomPackages(data);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const [studentsRes, tutorRes] = await Promise.all([
+        supabase.from('users').select('id, name, username, grade').eq('role', 'student').order('username'),
+        supabase.from('users').select('id').eq('username', 'Classroom').single() 
+      ]);
+
+      if (studentsRes.data) setStudents(studentsRes.data);
+    
+      if (tutorRes.data) {
+        setDummyTutorId(tutorRes.data.id);
+        fetchRoomPackages(tutorRes.data.id); 
+      } else {
+        setMessage('⚠️ ไม่พบบัญชีคุณครู "Classroom" ในระบบ กรุณาสร้างไอดีนี้ก่อนใช้งาน');
+        setLoading(false);
+      }
+    };
+
     fetchData();
-  }, []);
+  }, [fetchRoomPackages]);
 
   const filteredStudents = useMemo(() => {
     if (!studentSearchTerm) return students;

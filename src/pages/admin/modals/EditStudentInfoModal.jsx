@@ -27,7 +27,11 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
     }
   }, [isOpen]);
 
-  useEffect(() => {
+  const [prevStudent, setPrevStudent] = useState();
+  const [prevIsOpen, setPrevIsOpen] = useState();
+  if (student !== prevStudent || isOpen !== prevIsOpen) {
+    setPrevStudent(student);
+    setPrevIsOpen(isOpen);
     if (student) {
       setName(student.name || '');
       setUsername(student.username || '');
@@ -36,7 +40,7 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
       setCompanyAccountId(student.company_account_id || '');
       setError('');
     }
-  }, [student, isOpen]);
+  }
 
   if (!isOpen || !student) return null;
 

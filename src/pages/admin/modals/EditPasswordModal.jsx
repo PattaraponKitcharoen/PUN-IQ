@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function EditPasswordModal({ isOpen, onClose, user }) {
@@ -7,14 +7,16 @@ export default function EditPasswordModal({ isOpen, onClose, user }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  // ล้างฟอร์มทุกครั้งที่เปิด Modal ขึ้นมาใหม่
-  useEffect(() => {
+  // ล้างฟอร์มทุกครั้งที่เปิด Modal ขึ้นมาใหม่ (ปรับ state ระหว่าง render แทน useEffect)
+  const [prevIsOpen, setPrevIsOpen] = useState();
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
       setNewPassword('');
       setMessage('');
       setError('');
     }
-  }, [isOpen]);
+  }
 
   if (!isOpen || !user) return null;
 

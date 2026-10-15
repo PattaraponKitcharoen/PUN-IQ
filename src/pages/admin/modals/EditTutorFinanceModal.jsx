@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function EditTutorFinanceModal({ isOpen, onClose, tutor, onSuccess }) {
@@ -12,7 +12,11 @@ export default function EditTutorFinanceModal({ isOpen, onClose, tutor, onSucces
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const [prevTutor, setPrevTutor] = useState();
+  const [prevIsOpen, setPrevIsOpen] = useState();
+  if (tutor !== prevTutor || isOpen !== prevIsOpen) {
+    setPrevTutor(tutor);
+    setPrevIsOpen(isOpen);
     if (tutor && isOpen) {
       // โหลดข้อมูลธนาคารจากฐานข้อมูล (ถ้าเคยสร้างคอลัมน์ไว้แล้ว)
       setBankName(tutor.bank_name || '');
@@ -22,7 +26,7 @@ export default function EditTutorFinanceModal({ isOpen, onClose, tutor, onSucces
       setQrFile(null);
       setError('');
     }
-  }, [tutor, isOpen]);
+  }
 
   if (!isOpen || !tutor) return null;
 

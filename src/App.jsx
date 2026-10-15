@@ -19,6 +19,49 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   
   const currentUserId = useRef(null);
 
+  // 🔴 4. ปรับปรุงการตรวจสอบบัตร (รับพารามิเตอร์ 2 ตัว)
+  const handleSession = async (session, localSession) => {
+    if (!session && !localSession) {
+      setAuthenticated(false);
+      setUserRole(null);
+      currentUserId.current = null;
+      return;
+    }
+    
+    setAuthenticated(true);
+
+    // กรณี: เด็ก หรือ ผู้ปกครอง (LocalStorage)
+    if (localSession) {
+      if (currentUserId.current === localSession.id) return;
+      setUserRole(localSession.role);
+      currentUserId.current = localSession.id;
+      return;
+    }
+
+    // กรณี: แอดมิน หรือ ครู (Supabase)
+    if (currentUserId.current === session.user.id) return;
+
+    try {
+      const { data: userData, error } = await supabase
+        .from('users').select('role').eq('id', session.user.id).single();
+      
+      if (error || !userData) {
+        await supabase.auth.signOut();
+        setAuthenticated(false);
+        setUserRole(null);
+        currentUserId.current = null;
+        return;
+      }
+      
+      setUserRole(userData.role);
+      currentUserId.current = session.user.id;
+    } catch {
+      await supabase.auth.signOut();
+      setAuthenticated(false);
+      currentUserId.current = null;
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -103,49 +146,6 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
     return () => clearInterval(interval);
   }, [allowedRole]);
-
-  // 🔴 4. ปรับปรุงการตรวจสอบบัตร (รับพารามิเตอร์ 2 ตัว)
-  const handleSession = async (session, localSession) => {
-    if (!session && !localSession) {
-      setAuthenticated(false);
-      setUserRole(null);
-      currentUserId.current = null;
-      return;
-    }
-    
-    setAuthenticated(true);
-
-    // กรณี: เด็ก หรือ ผู้ปกครอง (LocalStorage)
-    if (localSession) {
-      if (currentUserId.current === localSession.id) return;
-      setUserRole(localSession.role);
-      currentUserId.current = localSession.id;
-      return;
-    }
-
-    // กรณี: แอดมิน หรือ ครู (Supabase)
-    if (currentUserId.current === session.user.id) return;
-
-    try {
-      const { data: userData, error } = await supabase
-        .from('users').select('role').eq('id', session.user.id).single();
-      
-      if (error || !userData) {
-        await supabase.auth.signOut();
-        setAuthenticated(false);
-        setUserRole(null);
-        currentUserId.current = null;
-        return;
-      }
-      
-      setUserRole(userData.role);
-      currentUserId.current = session.user.id;
-    } catch (err) {
-      await supabase.auth.signOut();
-      setAuthenticated(false);
-      currentUserId.current = null;
-    }
-  };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...</div>;
   if (!authenticated) return <Navigate to="/login" replace />;

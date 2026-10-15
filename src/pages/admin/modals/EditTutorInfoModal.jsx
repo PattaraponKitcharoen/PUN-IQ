@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function EditTutorInfoModal({ isOpen, onClose, tutor, onSuccess }) {
@@ -8,14 +8,18 @@ export default function EditTutorInfoModal({ isOpen, onClose, tutor, onSuccess }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const [prevTutor, setPrevTutor] = useState();
+  const [prevIsOpen, setPrevIsOpen] = useState();
+  if (tutor !== prevTutor || isOpen !== prevIsOpen) {
+    setPrevTutor(tutor);
+    setPrevIsOpen(isOpen);
     if (tutor) {
       setName(tutor.name || '');
       setUsername(tutor.username || '');
       setEmail(tutor.email || '');
       setError('');
     }
-  }, [tutor, isOpen]);
+  }
 
   if (!isOpen || !tutor) return null;
 

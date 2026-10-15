@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function ManageParent() {
@@ -15,7 +15,7 @@ export default function ManageParent() {
 
   const [editingId, setEditingId] = useState(null);
 
-  const fetchParents = async () => {
+  const fetchParents = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('users')
@@ -29,11 +29,12 @@ export default function ManageParent() {
       setParents(data || []);
     }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchParents();
-  }, []);
+    const load = async () => { await fetchParents(); };
+    load();
+  }, [fetchParents]);
 
   const handleEditClick = (parent) => {
     setEditingId(parent.id);
