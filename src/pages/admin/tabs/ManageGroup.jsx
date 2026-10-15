@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import SearchPicker from '../../../components/SearchPicker';
 
 export default function ManageGroup() {
   const [groups, setGroups] = useState([]);
@@ -13,6 +14,7 @@ export default function ManageGroup() {
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [searchTerm, setSearchTerm] = useState(''); // คงช่องค้นหาไว้ช่วยกรองชื่อกลุ่ม
+  const [memberSearch, setMemberSearch] = useState(''); // ค้นหานักเรียนเพื่อเพิ่มเข้ากลุ่ม
 
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingMapping, setLoadingMapping] = useState(false);
@@ -58,6 +60,7 @@ export default function ManageGroup() {
   // เปลี่ยนกลุ่มที่เลือก: ถ้าไม่ได้เลือกกลุ่มให้ล้างรายชื่อ ถ้าเลือกกลุ่มให้ล้างข้อความแจ้งเตือน
   const selectGroup = (groupId) => {
     setSelectedGroupId(groupId);
+    setMemberSearch('');
     if (!groupId) {
       setAssignedStudentIds([]);
       setInitialAssignedIds([]);
@@ -91,6 +94,12 @@ export default function ManageGroup() {
     setAssignedStudentIds(prev => 
       prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]
     );
+    setMessage('');
+  };
+
+  // เลือกจากช่องค้นหา = เพิ่มเข้ากลุ่ม (ถ้าอยู่ในกลุ่มแล้วไม่ต้องทำอะไร)
+  const handleAddStudentFromSearch = (student) => {
+    setAssignedStudentIds(prev => prev.includes(student.id) ? prev : [...prev, student.id]);
     setMessage('');
   };
 
@@ -251,6 +260,28 @@ export default function ManageGroup() {
               เลือกแล้ว {assignedStudentIds.length} คน
             </div>
           </div>
+
+          {!loadingMapping && students.length > 0 && (
+            <div className="mb-6">
+              <SearchPicker
+                items={students}
+                value={memberSearch}
+                onChange={setMemberSearch}
+                matches={(s, kw) => [s.name, s.username, s.grade].some(v => v && v.toLowerCase().includes(kw))}
+                renderItem={(s) => (
+                  <div className="flex items-center justify-between gap-2">
+                    <span>
+                      {s.name || s.username} <span className="text-gray-400">@{s.username}{s.grade ? ` · ${s.grade}` : ''}</span>
+                    </span>
+                    {assignedStudentIds.includes(s.id) && <span className="text-xs text-blue-600 font-semibold whitespace-nowrap">✓ อยู่ในกลุ่มแล้ว</span>}
+                  </div>
+                )}
+                onSelect={handleAddStudentFromSearch}
+                placeholder="🔍 ค้นหาชื่อ / username / ระดับชั้น เพื่อเพิ่มเข้ากลุ่ม..."
+                emptyText="ไม่พบนักเรียนที่ตรงกัน"
+              />
+            </div>
+          )}
 
           {loadingMapping ? (
             <div className="py-10 text-center text-gray-400">กำลังดึงข้อมูลสมาชิก...</div>
