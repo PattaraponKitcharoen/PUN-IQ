@@ -12,7 +12,7 @@ export default function ResetPassword() {
   useEffect(() => {
     // เก็บตัว subscription ไว้
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      (event) => {
         if (event === 'PASSWORD_RECOVERY') {
           console.log('ระบบพร้อมรับรหัสผ่านใหม่แล้ว');
         }

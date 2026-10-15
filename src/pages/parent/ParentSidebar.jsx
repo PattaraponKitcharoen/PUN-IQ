@@ -12,8 +12,6 @@ export default function ParentSidebar({ activeTab, setActiveTab, isSidebarOpen, 
     { id: 'billing', label: 'บิลค่าใช้จ่าย', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" /> },
   ];
 
-  const parentSession = JSON.parse(localStorage.getItem('custom_user_session') || '{}');
-
   return (
     <>
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-indigo-950 text-white p-5 flex flex-col justify-between transform transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:h-screen ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>

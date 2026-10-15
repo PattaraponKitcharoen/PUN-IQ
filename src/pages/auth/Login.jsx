@@ -15,7 +15,7 @@ export default function Login() {
       navigate('/reset-password');
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
         if (window.location.hash.includes('type=invite')) {
           navigate('/reset-password');
@@ -86,7 +86,7 @@ export default function Login() {
         setError('สิทธิ์การใช้งานไม่ถูกต้อง');
       }
 
-    } catch (err) {
+    } catch {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
     } finally {
       setLoading(false);

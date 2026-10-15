@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import TutorPayslip from '../TutorPayslip';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';

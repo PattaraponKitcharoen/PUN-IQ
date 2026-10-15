@@ -20,7 +20,7 @@ export default function TutorPayslip({ tutor, logs, totalAmount, billingMonth, i
           reader.onloadend = () => resolve(reader.result);
           reader.readAsDataURL(blob);
         });
-      } catch (e) {
+      } catch {
         return new Promise((resolve) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import StudentInvoiceModal from '../../admin/modals/StudentInvoiceModal';
 
@@ -71,7 +71,7 @@ export default function ParentBilling() {
     const computedLogs = (logs || []).map(log => {
       const ratePerHour = log.applied_student_rate || 0;
       const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
-      let amount = 0;
+      let amount;
       let roundsForDisplay = null;
       const isClassroom = log.tutor?.username === 'Classroom';
 

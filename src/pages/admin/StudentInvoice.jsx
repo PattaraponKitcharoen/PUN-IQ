@@ -21,7 +21,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
           reader.onloadend = () => resolve(reader.result);
           reader.readAsDataURL(blob);
         });
-      } catch (e) {
+      } catch {
         return new Promise((resolve) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';
