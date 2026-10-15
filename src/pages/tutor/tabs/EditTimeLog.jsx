@@ -55,24 +55,32 @@ export default function EditTimeLog() {
   }, []);
 
   // 🔴 3. เซ็ตค่าเริ่มต้นจาก Log เดิม
+  // (ปรับ state ระหว่าง render ทุกครั้งที่ log เปลี่ยน แทนการ setState ใน useEffect)
+  const [prevInitDeps, setPrevInitDeps] = useState({});
+  if (log !== prevInitDeps.log || navigate !== prevInitDeps.navigate) {
+    setPrevInitDeps({ log, navigate });
+    if (log) {
+      setDate(log.teaching_date || '');
+      setStartTime(log.start_time ? log.start_time.substring(0, 5) : ''); 
+      setEndTime(log.end_time ? log.end_time.substring(0, 5) : '');
+    
+      setLearningType(log.learning_type || 'general');
+      setSelectedCourseId(log.custom_course_id || '');
+      setSelectedGrade(log.grade_level || '');
+      setSubjectId(log.subject_id || '');
+
+      let cleanTopic = log.topic || '';
+      cleanTopic = cleanTopic.replace(/\[เกณฑ์: .*?\]\s*/g, '');
+      cleanTopic = cleanTopic.replace(/\s*\((เวลาจริง|เวลาที่ใช้): [\d.]+ ชม\.\)/g, '');
+      setTopic(cleanTopic.trim());
+    }
+  }
+
   useEffect(() => {
     if (!log) {
       navigate('/tutor/history', { replace: true });
       return;
     }
-    setDate(log.teaching_date || '');
-    setStartTime(log.start_time ? log.start_time.substring(0, 5) : ''); 
-    setEndTime(log.end_time ? log.end_time.substring(0, 5) : '');
-    
-    setLearningType(log.learning_type || 'general');
-    setSelectedCourseId(log.custom_course_id || '');
-    setSelectedGrade(log.grade_level || '');
-    setSubjectId(log.subject_id || '');
-
-    let cleanTopic = log.topic || '';
-    cleanTopic = cleanTopic.replace(/\[เกณฑ์: .*?\]\s*/g, '');
-    cleanTopic = cleanTopic.replace(/\s*\((เวลาจริง|เวลาที่ใช้): [\d.]+ ชม\.\)/g, '');
-    setTopic(cleanTopic.trim());
 
     const fetchCourses = async () => {
       if (log.tutor_id) {

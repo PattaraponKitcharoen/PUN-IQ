@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 
@@ -43,7 +43,7 @@ export default function HistoryLog() {
     }
   };
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     if (!selectedMonth) return;
 
     setLoading(true);
@@ -82,11 +82,12 @@ export default function HistoryLog() {
       }
     }
     setLoading(false);
-  };
+  }, [selectedMonth]);
 
   useEffect(() => {
-    fetchLogs();
-  }, [selectedMonth]);
+    const load = async () => { await fetchLogs(); };
+    load();
+  }, [fetchLogs]);
 
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
