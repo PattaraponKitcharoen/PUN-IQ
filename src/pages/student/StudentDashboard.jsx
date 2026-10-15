@@ -118,13 +118,15 @@ export default function StudentDashboard() {
     let tHrs = 0;
     let tAmt = 0;
 
-    const computedLogs = logs.map(log => {
+    // ใช้ for...of แทน .map เพื่อสะสมยอดรวมตามลำดับเดิม (ผลรวมเหมือนเดิมทุกหลักทศนิยม)
+    const computedLogs = [];
+    for (const log of logs) {
       const ratePerHour = log.applied_student_rate || 0;
       const grade = log.learning_type === 'course'
         ? log.custom_courses?.grade_level
         : log.grade_level;
       
-      let amount = 0;
+      let amount;
       let roundsForDisplay = null;
       const isClassroom = log.tutor?.username === 'Classroom';
 
@@ -145,8 +147,8 @@ export default function StudentDashboard() {
       tHrs += Number(log.duration_hours);
       tAmt = Math.round((tAmt + amount) * 100) / 100;
 
-      return { ...log, grade, ratePerHour, amount, roundsForDisplay };
-    });
+      computedLogs.push({ ...log, grade, ratePerHour, amount, roundsForDisplay });
+    }
 
     return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs };
   }, [logs]);

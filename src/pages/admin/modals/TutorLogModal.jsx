@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
 
 export default function TutorLogModal({ isOpen, onClose, tutor }) {
@@ -73,42 +73,6 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (editStartTime && editEndTime) {
-      const start = new Date(`2000-01-01T${editStartTime}`);
-      const end = new Date(`2000-01-01T${editEndTime}`);
-      let diff = (end - start) / (1000 * 60 * 60);
-      if (diff < 0) diff += 24;
-      setEditHours(diff.toFixed(2));
-    } else {
-      if (!editingLog) setEditHours('');
-    }
-  }, [editStartTime, editEndTime, editingLog]);
-
-  useEffect(() => {
-    if (isAdding && isClassroomTutor) {
-      setEditLearningType('course');
-      setLogType('individual');
-      setBulkTargetType('individual');
-    }
-  }, [isAdding, isClassroomTutor]);
-
-  useEffect(() => {
-    if (isCurrentGroupMode && groupId) {
-      const studentsInGroup = groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id);
-      setPresentStudentIds(studentsInGroup);
-    } else {
-      setPresentStudentIds([]);
-    }
-  }, [groupId, isCurrentGroupMode, groupMembers]);
-
-  useEffect(() => {
-    if (isOpen && tutor) {
-      fetchLogs();
-      resetFormState();
-    }
-  }, [isOpen, tutor]);
-
   const resetFormState = () => {
     setEditingLog(null);
     setIsAdding(false);
@@ -137,7 +101,7 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
     setBulkRows([{ teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }]);
   };
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
     
     // 🔴 1. เปลี่ยนมาดึง Custom Courses ผ่านตาราง course_tutors แทน
@@ -180,7 +144,68 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
     if (!error && data) setLogs(data);
     setLoading(false);
-  };
+  }, [tutor]);
+
+  // ปรับ state ที่ขึ้นกับค่าอื่นระหว่าง render (แทนการ setState ใน useEffect) — ลำดับเหมือนเดิม
+  // 1) คำนวณชั่วโมงอัตโนมัติจากเวลาเริ่ม-สิ้นสุด
+  const [prevHoursDeps, setPrevHoursDeps] = useState({});
+  if (
+    editStartTime !== prevHoursDeps.editStartTime ||
+    editEndTime !== prevHoursDeps.editEndTime ||
+    editingLog !== prevHoursDeps.editingLog
+  ) {
+    setPrevHoursDeps({ editStartTime, editEndTime, editingLog });
+    if (editStartTime && editEndTime) {
+      const start = new Date(`2000-01-01T${editStartTime}`);
+      const end = new Date(`2000-01-01T${editEndTime}`);
+      let diff = (end - start) / (1000 * 60 * 60);
+      if (diff < 0) diff += 24;
+      setEditHours(diff.toFixed(2));
+    } else {
+      if (!editingLog) setEditHours('');
+    }
+  }
+
+  // 2) ครู Classroom: บังคับเป็นคอร์สรายบุคคลตอนเพิ่มรายการ
+  const [prevClassroomDeps, setPrevClassroomDeps] = useState({});
+  if (isAdding !== prevClassroomDeps.isAdding || isClassroomTutor !== prevClassroomDeps.isClassroomTutor) {
+    setPrevClassroomDeps({ isAdding, isClassroomTutor });
+    if (isAdding && isClassroomTutor) {
+      setEditLearningType('course');
+      setLogType('individual');
+      setBulkTargetType('individual');
+    }
+  }
+
+  // 3) เลือกกลุ่ม: ติ๊กสมาชิกทุกคนในกลุ่มเป็นค่าเริ่มต้น
+  const [prevPresentDeps, setPrevPresentDeps] = useState({});
+  if (
+    groupId !== prevPresentDeps.groupId ||
+    isCurrentGroupMode !== prevPresentDeps.isCurrentGroupMode ||
+    groupMembers !== prevPresentDeps.groupMembers
+  ) {
+    setPrevPresentDeps({ groupId, isCurrentGroupMode, groupMembers });
+    if (isCurrentGroupMode && groupId) {
+      const studentsInGroup = groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id);
+      setPresentStudentIds(studentsInGroup);
+    } else {
+      setPresentStudentIds([]);
+    }
+  }
+
+  // 4) เปิด Modal / เปลี่ยนครู: ล้างฟอร์ม แล้วโหลดข้อมูลใหม่
+  const [prevOpenDeps, setPrevOpenDeps] = useState({});
+  if (isOpen !== prevOpenDeps.isOpen || tutor !== prevOpenDeps.tutor) {
+    setPrevOpenDeps({ isOpen, tutor });
+    if (isOpen && tutor) resetFormState();
+  }
+
+  useEffect(() => {
+    if (isOpen && tutor) {
+      const load = async () => { await fetchLogs(); };
+      load();
+    }
+  }, [isOpen, tutor, fetchLogs]);
 
   const filteredStudents = useMemo(() => {
     if (!studentSearchTerm) return allStudents;

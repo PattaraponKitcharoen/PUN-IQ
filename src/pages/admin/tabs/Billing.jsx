@@ -91,19 +91,27 @@ export default function Billing() {
     ).slice(0, 10);
   }, [searchQuery, tutors, students, activeTab]);
 
-  useEffect(() => {
+  // เปลี่ยนแท็บ: ล้างผู้ใช้ที่เลือกและข้อมูลเดิม (ปรับ state ระหว่าง render แทนการใช้ useEffect)
+  const [prevActiveTab, setPrevActiveTab] = useState();
+  if (activeTab !== prevActiveTab) {
+    setPrevActiveTab(activeTab);
     setSelectedUserId('');
     setSearchQuery('');
     setLogs([]);
     setExpandedGroups([]);
     setExpandedLogs([]);
-  }, [activeTab]);
+  }
+
+  // ยังไม่ได้เลือกผู้ใช้หรือเดือน: ล้างรายการ log
+  const [prevLogsKey, setPrevLogsKey] = useState();
+  const logsKey = `${selectedUserId}|${selectedMonth}`;
+  if (logsKey !== prevLogsKey) {
+    setPrevLogsKey(logsKey);
+    if (!selectedUserId || !selectedMonth) setLogs([]);
+  }
 
   useEffect(() => {
-    if (!selectedUserId || !selectedMonth) {
-      setLogs([]);
-      return;
-    }
+    if (!selectedUserId || !selectedMonth) return;
 
     const fetchBillingLogs = async () => {
       setLoading(true);
@@ -127,14 +135,21 @@ export default function Billing() {
     };
 
     fetchBillingLogs();
-  }, [selectedUserId, selectedMonth]);
+  }, [selectedUserId, selectedMonth, activeTab]);
 
   const selectedUserDetails = useMemo(() => {
     const list = activeTab === 'tutor' ? tutors : students;
     return list.find(u => u.id === selectedUserId);
   }, [selectedUserId, activeTab, tutors, students]);
 
-  useEffect(() => {
+  // นักเรียนแต่ละคนอาจผูกบัญชีรับเงินของตัวเอง: เลือกบัญชีให้อัตโนมัติเมื่อเปลี่ยนนักเรียน
+  const [prevAccountDeps, setPrevAccountDeps] = useState({});
+  if (
+    selectedUserDetails !== prevAccountDeps.selectedUserDetails ||
+    activeTab !== prevAccountDeps.activeTab ||
+    companyAccounts !== prevAccountDeps.companyAccounts
+  ) {
+    setPrevAccountDeps({ selectedUserDetails, activeTab, companyAccounts });
     if (activeTab === 'student' && selectedUserDetails) {
       if (selectedUserDetails.company_account_id) {
         setSelectedAccountId(selectedUserDetails.company_account_id);
@@ -142,7 +157,7 @@ export default function Billing() {
         setSelectedAccountId(companyAccounts[0].id);
       }
     }
-  }, [selectedUserDetails, activeTab, companyAccounts]);
+  }
 
   const selectedAccountDetails = companyAccounts.find(acc => acc.id === selectedAccountId);
 
@@ -156,7 +171,7 @@ export default function Billing() {
       const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
       const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
 
-      let amount = 0;
+      let amount;
       let roundsForDisplay = null;
       const isClassroom = (activeTab === 'student' && log.users?.username === 'Classroom') || (activeTab === 'tutor' && selectedUserDetails?.username === 'Classroom');
 
@@ -244,7 +259,7 @@ export default function Billing() {
         const ratePerHour = activeTab === 'tutor' ? (log.applied_tutor_rate || 0) : (log.applied_student_rate || 0);
         const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
         
-        let amount = 0;
+        let amount;
         let roundsForDisplay = null;
         const isClassroom = (activeTab === 'student' && log.users?.username === 'Classroom') || (activeTab === 'tutor' && userGroups[keyId].user.username === 'Classroom');
 

@@ -47,11 +47,16 @@ export default function ParentDashboard() {
     fetchChildren();
   }, []);
 
+  // ยังไม่ได้เลือกบุตรหรือเดือน: ล้างรายการ (ปรับ state ระหว่าง render แทนการใช้ useEffect)
+  const [prevLogsKey, setPrevLogsKey] = useState();
+  const logsKey = `${selectedChildId}|${selectedMonth}`;
+  if (logsKey !== prevLogsKey) {
+    setPrevLogsKey(logsKey);
+    if (!selectedChildId || !selectedMonth) setLogs([]);
+  }
+
   useEffect(() => {
-    if (!selectedChildId || !selectedMonth) {
-        setLogs([]);
-        return;
-    }
+    if (!selectedChildId || !selectedMonth) return;
 
     const fetchLogs = async () => {
       setLoading(true);
@@ -81,11 +86,13 @@ export default function ParentDashboard() {
     let tHrs = 0;
     let tAmt = 0;
 
-    const computedLogs = logs.map(log => {
+    // ใช้ for...of แทน .map เพื่อสะสมยอดรวมตามลำดับเดิม (ผลรวมเหมือนเดิมทุกหลักทศนิยม)
+    const computedLogs = [];
+    for (const log of logs) {
       const ratePerHour = log.applied_student_rate || 0;
       const grade = log.learning_type === 'course' ? log.custom_courses?.grade_level : log.grade_level;
       
-      let amount = 0;
+      let amount;
       let roundsForDisplay = null;
       const isClassroom = log.tutor?.username === 'Classroom';
 
@@ -104,8 +111,8 @@ export default function ParentDashboard() {
       tHrs += Number(log.duration_hours);
       tAmt += amount;
 
-      return { ...log, grade, ratePerHour, amount, roundsForDisplay };
-    });
+      computedLogs.push({ ...log, grade, ratePerHour, amount, roundsForDisplay });
+    }
 
     return { totalHrs: tHrs, totalAmt: tAmt, logsWithCalculation: computedLogs };
   }, [logs]);

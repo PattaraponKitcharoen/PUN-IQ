@@ -68,17 +68,20 @@ export default function TutorEarnings() {
     fetchMyTeachingLogs();
   }, [sessionUser?.id, selectedMonth]);
 
-  const calculateEarnings = () => {
+  // useMemo ให้ logsWithCalculation คงที่ระหว่าง render (groupedLogs ด้านล่าง memo ได้จริง)
+  const { totalHrs, totalEarnings, logsWithCalculation } = useMemo(() => {
     let totalHrs = 0;
     let totalEarnings = 0;
 
-    const logsWithCalculation = logs.map(log => {
+    // ใช้ for...of แทน .map เพื่อสะสมยอดรวมตามลำดับเดิม (ผลรวมเหมือนเดิมทุกหลักทศนิยม)
+    const logsWithCalculation = [];
+    for (const log of logs) {
       const ratePerHour = log.applied_tutor_rate || 0;
       const grade = log.learning_type === 'course'
         ? log.custom_courses?.grade_level
         : log.grade_level;
       
-      let amount = 0;
+      let amount;
       let roundsForDisplay = null;
 
       if (isClassroomTutor) {
@@ -97,13 +100,11 @@ export default function TutorEarnings() {
       totalHrs += Number(log.duration_hours);
       totalEarnings = Math.round((totalEarnings + amount) * 100) / 100;
 
-      return { ...log, grade, ratePerHour, amount, roundsForDisplay };
-    });
+      logsWithCalculation.push({ ...log, grade, ratePerHour, amount, roundsForDisplay });
+    }
 
     return { totalHrs, totalEarnings, logsWithCalculation };
-  };
-
-  const { totalHrs, totalEarnings, logsWithCalculation } = calculateEarnings();
+  }, [logs, isClassroomTutor]);
   const formatTime = (timeStr) => timeStr ? timeStr.substring(0, 5) : '-';
 
   const groupedLogs = useMemo(() => {
