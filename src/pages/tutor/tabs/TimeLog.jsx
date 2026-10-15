@@ -1,6 +1,71 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 
+// ช่องค้นหาแบบมีรายการแนะนำเด้งลงมาให้เลือก
+function SearchPicker({ items, value, onChange, matches, renderItem, onSelect, placeholder, emptyText }) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const keyword = value.trim().toLowerCase();
+  const results = keyword ? items.filter(item => matches(item, keyword)).slice(0, 10) : [];
+
+  const choose = (item) => {
+    onSelect(item);
+    onChange('');
+    setOpen(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (!open || !keyword) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(i => Math.min(i + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (results[activeIndex]) choose(results[activeIndex]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative mb-2">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); setActiveIndex(0); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        translate="no"
+        lang="th"
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans bg-white"
+      />
+      {open && keyword && (
+        <ul className="absolute z-20 left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg text-sm" translate="no">
+          {results.length === 0 ? (
+            <li className="px-4 py-2.5 text-gray-400">{emptyText}</li>
+          ) : results.map((item, index) => (
+            <li
+              key={item.id}
+              // ใช้ onMouseDown เพื่อให้เลือกได้ก่อนที่ input จะ blur แล้วปิดกล่อง
+              onMouseDown={(e) => { e.preventDefault(); choose(item); }}
+              onMouseEnter={() => setActiveIndex(index)}
+              className={`px-4 py-2.5 cursor-pointer ${index === activeIndex ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'}`}
+            >
+              {renderItem(item)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function TimeLog() {
   const [myStudents, setMyStudents] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -24,7 +89,9 @@ export default function TimeLog() {
 
   const [studentId, setStudentId] = useState('');
   const [groupId, setGroupId] = useState('');
-  
+  const [studentSearch, setStudentSearch] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
+
   const [learningType, setLearningType] = useState('general');
   const [selectedCourseId, setSelectedCourseId] = useState('');
 
@@ -53,101 +120,100 @@ export default function TimeLog() {
   const isClassroomTutor = tutorUsername === 'Classroom';
   const isCurrentGroupMode = logType === 'group' || (logType === 'bulk' && bulkTargetType === 'group');
 
-  useEffect(() => {
-    if (startTime && endTime) {
-      const start = new Date(`2000-01-01T${startTime}`);
-      const end = new Date(`2000-01-01T${endTime}`);
+  // คำนวณชั่วโมงอัตโนมัติทุกครั้งที่เปลี่ยนเวลาเริ่ม/สิ้นสุด
+  const updateTimeRange = (newStart, newEnd) => {
+    setStartTime(newStart);
+    setEndTime(newEnd);
+    if (newStart && newEnd) {
+      const start = new Date(`2000-01-01T${newStart}`);
+      const end = new Date(`2000-01-01T${newEnd}`);
       let diff = (end - start) / (1000 * 60 * 60);
-      if (diff < 0) diff += 24; 
+      if (diff < 0) diff += 24;
       if (diff > 0) {
         setDurationHours(Number.isInteger(diff) ? diff.toString() : diff.toFixed(2));
       }
     }
-  }, [startTime, endTime]);
-
-  useEffect(() => {
-    if (isClassroomTutor) {
-      setLearningType('course');
-      setLogType('individual');
-      setBulkTargetType('individual');
-    }
-  }, [isClassroomTutor]);
-
-  const fetchData = async () => {
-    setLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const tutorId = session?.user?.id;
-    setCurrentTutorId(tutorId);
-
-    if (tutorId) {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('username, is_vip')
-        .eq('id', tutorId)
-        .single();
-      setTutorProfile(profile);
-      setTutorUsername(profile?.username || '');
-    }
-
-    const { data: subsData } = await supabase.from('subjects').select('*').order('subject_name');
-    if (subsData) setSubjectsList(subsData);
-
-    if (tutorId) {
-      const [ratesRes, tutorCoursesRes] = await Promise.all([
-        supabase.from('pricing_rates').select('*'),
-        supabase.from('course_tutors').select('custom_courses(*)').eq('tutor_id', tutorId)
-      ]);
-
-      if (ratesRes.data) setPricingRates(ratesRes.data);
-      if (tutorCoursesRes.data) {
-        const activeCourses = tutorCoursesRes.data
-          .map(ct => ct.custom_courses)
-          .filter(c => c && c.is_active === true);
-        setCustomCourses(activeCourses);
-      }
-
-      const { data: indMap } = await supabase.from('tutor_students').select('student_id').eq('tutor_id', tutorId);
-      const indStudentIds = indMap?.map(m => m.student_id) || [];
-
-      const { data: grpMap } = await supabase.from('tutor_groups').select('group_id').eq('tutor_id', tutorId);
-      const myGroupIds = grpMap?.map(g => g.group_id) || [];
-
-      let grpStudentIds = [];
-      if (myGroupIds.length > 0) {
-        const { data: myGroupsData } = await supabase.from('groups').select('*').in('id', myGroupIds).order('group_name');
-        setGroups(myGroupsData || []);
-
-        const { data: membersData } = await supabase.from('group_members').select('*').in('group_id', myGroupIds);
-        setGroupMembers(membersData || []);
-        grpStudentIds = (membersData || []).map(m => m.student_id);
-      } else {
-        setGroups([]);
-        setGroupMembers([]);
-      }
-
-      const allStudentIds = [...new Set([...indStudentIds, ...grpStudentIds])];
-      if (allStudentIds.length > 0) {
-        const { data: studentsData } = await supabase.from('users').select('id, name, username, grade').in('id', allStudentIds);
-        setMyStudents(studentsData || []);
-      } else {
-        setMyStudents([]);
-      }
-    }
-    setLoading(false);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // รีเซ็ตรายชื่อผู้เข้าเรียนเป็นสมาชิกทั้งกลุ่ม ทุกครั้งที่เปลี่ยนกลุ่มหรือเปลี่ยนโหมด
+  const presentSelectionKey = isCurrentGroupMode && groupId ? groupId : '';
+  const [prevPresentSelectionKey, setPrevPresentSelectionKey] = useState(presentSelectionKey);
+  if (presentSelectionKey !== prevPresentSelectionKey) {
+    setPrevPresentSelectionKey(presentSelectionKey);
+    setPresentStudentIds(presentSelectionKey ? groupMembers.filter(m => m.group_id === presentSelectionKey).map(m => m.student_id) : []);
+  }
 
   useEffect(() => {
-    if (isCurrentGroupMode && groupId) {
-      const studentsInGroup = groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id);
-      setPresentStudentIds(studentsInGroup);
-    } else {
-      setPresentStudentIds([]);
-    }
-  }, [groupId, isCurrentGroupMode, groupMembers]);
+    const fetchData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const tutorId = session?.user?.id;
+      setCurrentTutorId(tutorId);
+
+      if (tutorId) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('username, is_vip')
+          .eq('id', tutorId)
+          .single();
+        setTutorProfile(profile);
+        setTutorUsername(profile?.username || '');
+
+        // บัญชี Classroom ใช้ได้เฉพาะแพ็กเกจสถานที่แบบรายบุคคล
+        if (profile?.username === 'Classroom') {
+          setLearningType('course');
+          setLogType('individual');
+          setBulkTargetType('individual');
+        }
+      }
+
+      const { data: subsData } = await supabase.from('subjects').select('*').order('subject_name');
+      if (subsData) setSubjectsList(subsData);
+
+      if (tutorId) {
+        const [ratesRes, tutorCoursesRes] = await Promise.all([
+          supabase.from('pricing_rates').select('*'),
+          supabase.from('course_tutors').select('custom_courses(*)').eq('tutor_id', tutorId)
+        ]);
+
+        if (ratesRes.data) setPricingRates(ratesRes.data);
+        if (tutorCoursesRes.data) {
+          const activeCourses = tutorCoursesRes.data
+            .map(ct => ct.custom_courses)
+            .filter(c => c && c.is_active === true);
+          setCustomCourses(activeCourses);
+        }
+
+        const { data: indMap } = await supabase.from('tutor_students').select('student_id').eq('tutor_id', tutorId);
+        const indStudentIds = indMap?.map(m => m.student_id) || [];
+
+        const { data: grpMap } = await supabase.from('tutor_groups').select('group_id').eq('tutor_id', tutorId);
+        const myGroupIds = grpMap?.map(g => g.group_id) || [];
+
+        let grpStudentIds = [];
+        if (myGroupIds.length > 0) {
+          const { data: myGroupsData } = await supabase.from('groups').select('*').in('id', myGroupIds).order('group_name');
+          setGroups(myGroupsData || []);
+
+          const { data: membersData } = await supabase.from('group_members').select('*').in('group_id', myGroupIds);
+          setGroupMembers(membersData || []);
+          grpStudentIds = (membersData || []).map(m => m.student_id);
+        } else {
+          setGroups([]);
+          setGroupMembers([]);
+        }
+
+        const allStudentIds = [...new Set([...indStudentIds, ...grpStudentIds])];
+        if (allStudentIds.length > 0) {
+          const { data: studentsData } = await supabase.from('users').select('id, name, username, grade').in('id', allStudentIds);
+          setMyStudents(studentsData || []);
+        } else {
+          setMyStudents([]);
+        }
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
 
   const filteredCustomCourses = customCourses.filter(course => {
     if (!course.student_id && !course.group_id) return true;
@@ -290,7 +356,7 @@ export default function TimeLog() {
 
       setMessage(`✅ บันทึกเวลา${isClassroomTutor ? 'ใช้งานสถานที่' : 'สอน'}สำเร็จเรียบร้อย! (บันทึกทั้งหมด ${inserts.length} รายการ)`);
       
-      setStudentId(''); setGroupId(''); setStartTime(''); setEndTime(''); setDurationHours(''); setTopic(''); setSubjectId(''); setSelectedCourseId(''); setSelectedGrade('');
+      setStudentId(''); setGroupId(''); setStudentSearch(''); setGroupSearch(''); setStartTime(''); setEndTime(''); setDurationHours(''); setTopic(''); setSubjectId(''); setSelectedCourseId(''); setSelectedGrade('');
       setBulkRows([{ teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }]);
       setLearningType(isClassroomTutor ? 'course' : 'general');
     } catch (err) {
@@ -301,7 +367,7 @@ export default function TimeLog() {
     }
   };
 
-  const studentsInThisGroupDetails = myStudents.filter(s => groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id).includes(s.id));
+  const studentsInThisGroupDetails =myStudents.filter(s => groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id).includes(s.id));
   const isTargetSelected = isCurrentGroupMode ? groupId : studentId;
 
   if (loading) return <div className="p-10 text-center text-gray-500">กำลังโหลดข้อมูล...</div>;
@@ -342,6 +408,16 @@ export default function TimeLog() {
           {!isCurrentGroupMode ? (
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase mb-1">{isClassroomTutor ? 'เลือกผู้เช่าสถานที่' : 'เลือกนักเรียน'}</label>
+              <SearchPicker
+                items={myStudents}
+                value={studentSearch}
+                onChange={setStudentSearch}
+                matches={(s, kw) => [s.name, s.username, s.grade].some(v => v && v.toLowerCase().includes(kw))}
+                renderItem={(s) => <>{s.name || s.username} <span className="text-gray-400">({s.grade || '-'})</span></>}
+                onSelect={(s) => { setStudentId(s.id); if (!isClassroomTutor) setLearningType('general'); }}
+                placeholder="🔍 ค้นหาชื่อ / username / ระดับชั้น..."
+                emptyText="ไม่พบรายชื่อที่ตรงกัน"
+              />
               {/* 🔴 เพิ่มการบล็อกแปลภาษาและล็อกฟอนต์ (Select 1) */}
               <select value={studentId} onChange={(e) => { setStudentId(e.target.value); if(!isClassroomTutor) setLearningType('general'); }} translate="no" lang="th" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans font-medium bg-white" required={!isCurrentGroupMode}>
                 <option value="" translate="no">-- เลือกรายชื่อ --</option>
@@ -351,6 +427,16 @@ export default function TimeLog() {
           ) : (
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เลือกกลุ่มนักเรียน</label>
+              <SearchPicker
+                items={groups}
+                value={groupSearch}
+                onChange={setGroupSearch}
+                matches={(g, kw) => (g.group_name || '').toLowerCase().includes(kw)}
+                renderItem={(g) => g.group_name}
+                onSelect={(g) => { setGroupId(g.id); setLearningType('general'); }}
+                placeholder="🔍 ค้นหาชื่อกลุ่ม..."
+                emptyText="ไม่พบกลุ่มที่ตรงกัน"
+              />
               {/* 🔴 เพิ่มการบล็อกแปลภาษาและล็อกฟอนต์ (Select 2) */}
               <select value={groupId} onChange={(e) => { setGroupId(e.target.value); setLearningType('general'); }} translate="no" lang="th" className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans bg-white" required={isCurrentGroupMode}>
                 <option value="" translate="no">-- เลือกกลุ่ม --</option>
@@ -437,11 +523,11 @@ export default function TimeLog() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เวลาเริ่ม</label>
-                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans" required />
+                  <input type="time" value={startTime} onChange={(e) => updateTimeRange(e.target.value, endTime)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans" required />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เวลาสิ้นสุด</label>
-                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans" required />
+                  <input type="time" value={endTime} onChange={(e) => updateTimeRange(startTime, e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans" required />
                 </div>
               </div>
               <div>
