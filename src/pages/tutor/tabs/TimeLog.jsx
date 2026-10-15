@@ -91,6 +91,7 @@ export default function TimeLog() {
   const [groupId, setGroupId] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const [groupSearch, setGroupSearch] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
 
   const [learningType, setLearningType] = useState('general');
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -140,6 +141,7 @@ export default function TimeLog() {
   const [prevPresentSelectionKey, setPrevPresentSelectionKey] = useState(presentSelectionKey);
   if (presentSelectionKey !== prevPresentSelectionKey) {
     setPrevPresentSelectionKey(presentSelectionKey);
+    setMemberSearch('');
     setPresentStudentIds(presentSelectionKey ? groupMembers.filter(m => m.group_id === presentSelectionKey).map(m => m.student_id) : []);
   }
 
@@ -356,7 +358,7 @@ export default function TimeLog() {
 
       setMessage(`✅ บันทึกเวลา${isClassroomTutor ? 'ใช้งานสถานที่' : 'สอน'}สำเร็จเรียบร้อย! (บันทึกทั้งหมด ${inserts.length} รายการ)`);
       
-      setStudentId(''); setGroupId(''); setStudentSearch(''); setGroupSearch(''); setStartTime(''); setEndTime(''); setDurationHours(''); setTopic(''); setSubjectId(''); setSelectedCourseId(''); setSelectedGrade('');
+      setStudentId(''); setGroupId(''); setStudentSearch(''); setGroupSearch(''); setMemberSearch(''); setStartTime(''); setEndTime(''); setDurationHours(''); setTopic(''); setSubjectId(''); setSelectedCourseId(''); setSelectedGrade('');
       setBulkRows([{ teaching_date: getLocalTodayDate(), start_time: '', end_time: '', duration_hours: '', topic: '' }]);
       setLearningType(isClassroomTutor ? 'course' : 'general');
     } catch (err) {
@@ -368,6 +370,10 @@ export default function TimeLog() {
   };
 
   const studentsInThisGroupDetails =myStudents.filter(s => groupMembers.filter(m => m.group_id === groupId).map(m => m.student_id).includes(s.id));
+  const memberKeyword = memberSearch.trim().toLowerCase();
+  const visibleGroupMembers = memberKeyword
+    ? studentsInThisGroupDetails.filter(s => [s.name, s.username, s.grade].some(v => v && v.toLowerCase().includes(memberKeyword)))
+    : studentsInThisGroupDetails;
   const isTargetSelected = isCurrentGroupMode ? groupId : studentId;
 
   if (loading) return <div className="p-10 text-center text-gray-500">กำลังโหลดข้อมูล...</div>;
@@ -451,8 +457,22 @@ export default function TimeLog() {
                       {presentStudentIds.length === studentsInThisGroupDetails.length ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
                     </button>
                   </div>
+                  <input
+                    type="text"
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    // กด Enter ในช่องค้นหาต้องไม่ submit ฟอร์มลงเวลา
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    placeholder="🔍 ค้นหาสมาชิกในกลุ่ม..."
+                    translate="no"
+                    lang="th"
+                    className="w-full mb-3 px-3 py-2 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-sans bg-white"
+                  />
+                  {visibleGroupMembers.length === 0 && (
+                    <p className="text-sm text-gray-400 px-1 py-2">ไม่พบสมาชิกที่ตรงกัน</p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-                    {studentsInThisGroupDetails.map(student => (
+                    {visibleGroupMembers.map(student => (
                       <label key={student.id} className={`flex items-center space-x-2 cursor-pointer p-2.5 rounded-lg border transition ${presentStudentIds.includes(student.id) ? 'bg-white border-indigo-300 shadow-sm' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
                         <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" checked={presentStudentIds.includes(student.id)} onChange={() => handleTogglePresent(student.id)} />
                         <span className="text-sm text-gray-700 truncate" translate="no">{student.name || student.username}</span>
