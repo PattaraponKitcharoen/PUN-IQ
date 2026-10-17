@@ -6,6 +6,8 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState(''); 
   const [grade, setGrade] = useState(''); 
+  const [schoolName, setSchoolName] = useState('');
+  const [parentName, setParentName] = useState('');
   const [companyAccountId, setCompanyAccountId] = useState('');
   const [companyAccounts, setCompanyAccounts] = useState([]);
   
@@ -37,6 +39,8 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
       setUsername(student.username || '');
       setPhone(student.phone || '');
       setGrade(student.grade || '');
+      setSchoolName(student.school_name || '');
+      setParentName(student.parent_name || '');
       setCompanyAccountId(student.company_account_id || '');
       setError('');
     }
@@ -61,6 +65,8 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
         username: username.trim(),
         phone: phone.trim(),
         grade: grade.trim(),
+        school_name: schoolName.trim() || null,
+        parent_name: parentName.trim() || null,
         company_account_id: companyAccountId || null,
         email: null // บังคับล้างค่าอีเมลเดิมทิ้งเป็น null ป้องกันปัญหา Duplicate Constraint
       };
@@ -122,6 +128,16 @@ export default function EditStudentInfoModal({ isOpen, onClose, student, onSucce
               <label className="block text-gray-700 text-xs font-bold uppercase mb-2">เบอร์โทรศัพท์</label>
               <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อโรงเรียน <span className="font-normal normal-case text-gray-400">(ไม่บังคับ)</span></label>
+            <input type="text" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          <div>
+            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อผู้ปกครอง <span className="font-normal normal-case text-gray-400">(ไม่บังคับ)</span></label>
+            <input type="text" value={parentName} onChange={(e) => setParentName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>

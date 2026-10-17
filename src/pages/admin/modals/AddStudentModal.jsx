@@ -7,6 +7,8 @@ export default function AddStudentModal({ isOpen, onClose }) {
   const [password, setPassword] = useState(''); // 🔴 เพิ่ม State เก็บพาสเวิร์ดแทนเมล
   const [phone, setPhone] = useState('');  
   const [grade, setGrade] = useState('');  
+  const [schoolName, setSchoolName] = useState('');
+  const [parentName, setParentName] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -32,6 +34,8 @@ export default function AddStudentModal({ isOpen, onClose }) {
         name: name.trim(),
         phone: phone.trim(),
         grade: grade.trim(),
+        school_name: schoolName.trim() || null,
+        parent_name: parentName.trim() || null,
         email: null, // บังคับให้เป็นค่าว่างแบบสมบูรณ์ของ DB (แก้อาการ Null ซ้ำแล้วพัง)
         role: 'student'
       };
@@ -47,6 +51,8 @@ export default function AddStudentModal({ isOpen, onClose }) {
       setPassword('');
       setPhone('');
       setGrade('');
+      setSchoolName('');
+      setParentName('');
       
       setTimeout(() => {
         onClose(); // เรียกหน้าต่างปิด และสั่งให้ ManageStudent รีเฟรชตารางข้อมูลอัตโนมัติ
@@ -70,6 +76,8 @@ export default function AddStudentModal({ isOpen, onClose }) {
     setPassword('');
     setPhone('');
     setGrade('');
+    setSchoolName('');
+    setParentName('');
     setError('');
     setMessage('');
     onClose();
@@ -116,6 +124,16 @@ export default function AddStudentModal({ isOpen, onClose }) {
               <label className="block text-gray-700 text-xs font-bold uppercase mb-2">เบอร์โทรศัพท์</label>
               <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น 0987654321" required />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อโรงเรียน <span className="font-normal normal-case text-gray-400">(ไม่บังคับ)</span></label>
+            <input type="text" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น โรงเรียนสาธิตฯ" />
+          </div>
+
+          <div>
+            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อผู้ปกครอง <span className="font-normal normal-case text-gray-400">(ไม่บังคับ)</span></label>
+            <input type="text" value={parentName} onChange={(e) => setParentName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น คุณแม่สมศรี ใจดี" />
           </div>
 
           <div className="flex space-x-3 pt-2">

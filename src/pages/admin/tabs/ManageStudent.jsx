@@ -35,7 +35,7 @@ export default function ManageStudent() {
     let query = supabase
       .from('users')
       // 🔴 เอา email ออกจากจุด select query
-      .select('id, name, username, grade, phone, company_account_id', { count: 'exact' })
+      .select('id, name, username, grade, phone, school_name, parent_name, company_account_id', { count: 'exact' })
       .eq('role', 'student');
 
     const sanitizeSearch = (term) => {
@@ -45,7 +45,7 @@ export default function ManageStudent() {
     if (searchTerm) {
       const safeTerm = sanitizeSearch(searchTerm);
       if (safeTerm.length > 0) {
-        query = query.or(`username.ilike.%${safeTerm}%,name.ilike.%${safeTerm}%`);
+        query = query.or(`username.ilike.%${safeTerm}%,name.ilike.%${safeTerm}%,school_name.ilike.%${safeTerm}%,parent_name.ilike.%${safeTerm}%`);
       }
     }
 
@@ -98,7 +98,7 @@ export default function ManageStudent() {
             </div>
             <input
               type="text"
-              placeholder="ค้นหาชื่อ หรือ Username นักเรียน..."
+              placeholder="ค้นหาชื่อ, Username, โรงเรียน, ผู้ปกครอง..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -133,6 +133,7 @@ export default function ManageStudent() {
                   </th>
                   <th className="p-4 font-semibold">ระดับชั้น</th>
                   <th className="p-4 font-semibold">เบอร์โทรศัพท์</th>
+                  <th className="p-4 font-semibold">โรงเรียน / ผู้ปกครอง</th>
                   {/* 🔴 เอาหัวตารางอีเมลออก */}
                   <th className="p-4 font-semibold text-center w-40">จัดการ</th>
                 </tr>
@@ -144,6 +145,10 @@ export default function ManageStudent() {
                     <td className="p-4 text-gray-600">{student.username}</td>
                     <td className="p-4 text-gray-700 font-semibold"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs">{student.grade || '-'}</span></td>
                     <td className="p-4 text-gray-600">{student.phone || '-'}</td>
+                    <td className="p-4 text-sm">
+                      <p className="text-gray-700">{student.school_name || '-'}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">ผู้ปกครอง: {student.parent_name || '-'}</p>
+                    </td>
                     {/* 🔴 เอาช่องแสดงผลอีเมลเดิมออก */}
                     <td className="p-4 flex items-center justify-center space-x-2">
                       <button onClick={() => { setSelectedStudent(student); setShowEditInfoModal(true); }} title="แก้ไขข้อมูล" className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition">
