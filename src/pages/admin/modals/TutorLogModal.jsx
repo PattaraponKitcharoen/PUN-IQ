@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import SearchPicker from '../../../components/SearchPicker';
 
 export default function TutorLogModal({ isOpen, onClose, tutor }) {
   const [logs, setLogs] = useState([]);
@@ -21,6 +22,8 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
 
   const [addStudentId, setAddStudentId] = useState('');
   const [groupId, setGroupId] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
+  const [filterStudentSearch, setFilterStudentSearch] = useState('');
   const [presentStudentIds, setPresentStudentIds] = useState([]);
   
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
@@ -621,6 +624,16 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                 ) : (
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1">เลือกกลุ่มนักเรียน</label>
+                    <SearchPicker
+                      items={groups}
+                      value={groupSearch}
+                      onChange={setGroupSearch}
+                      matches={(g, kw) => (g.group_name || '').toLowerCase().includes(kw)}
+                      renderItem={(g) => g.group_name}
+                      onSelect={(g) => { setGroupId(g.id); setEditLearningType('general'); }}
+                      placeholder="🔍 ค้นหาชื่อกลุ่ม..."
+                      emptyText="ไม่พบกลุ่มที่ตรงกัน"
+                    />
                     <select value={groupId} onChange={(e) => { setGroupId(e.target.value); setEditLearningType('general'); }} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" required>
                       <option value="">-- เลือกกลุ่ม --</option>
                       {groups.map(g => <option key={g.id} value={g.id}>{g.group_name}</option>)}
@@ -798,6 +811,16 @@ export default function TutorLogModal({ isOpen, onClose, tutor }) {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">กรองรายชื่อ</label>
+                    <SearchPicker
+                      items={filterOptions.students}
+                      value={filterStudentSearch}
+                      onChange={setFilterStudentSearch}
+                      matches={(s, kw) => (s.name || '').toLowerCase().includes(kw)}
+                      renderItem={(s) => s.name}
+                      onSelect={(s) => setFilterStudent(s.id)}
+                      placeholder="🔍 พิมพ์ชื่อเพื่อกรอง..."
+                      emptyText="ไม่พบรายชื่อ"
+                    />
                     <select value={filterStudent} onChange={(e) => setFilterStudent(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-indigo-500 bg-white font-medium text-gray-700">
                       <option value="">-- {isClassroomTutor ? 'ผู้เช่าทั้งหมด' : 'นักเรียนทุกคน'} --</option>
                       {filterOptions.students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

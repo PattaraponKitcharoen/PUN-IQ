@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import SearchPicker from '../../../components/SearchPicker';
 
 export default function ManageCustomCourse() {
   const [courses, setCourses] = useState([]);
@@ -19,6 +20,8 @@ export default function ManageCustomCourse() {
   const [courseTargetType, setCourseTargetType] = useState('individual'); 
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState(''); 
+  const [studentSearch, setStudentSearch] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
   
   const [selectedTutorIds, setSelectedTutorIds] = useState([]);
   const [tutorSearchTerm, setTutorSearchTerm] = useState('');
@@ -262,6 +265,16 @@ export default function ManageCustomCourse() {
               {courseTargetType === 'individual' && (
                 <div className="animate-fadeIn">
                   <label className="block text-xs font-bold text-blue-800 uppercase mb-1">เลือกนักเรียน (ตัวต่อตัว)</label>
+                  <SearchPicker
+                    items={students}
+                    value={studentSearch}
+                    onChange={setStudentSearch}
+                    matches={(s, kw) => [s.name, s.username, s.grade].some(v => v && v.toLowerCase().includes(kw))}
+                    renderItem={(s) => <>{s.name || s.username} <span className="text-gray-400">@{s.username}</span></>}
+                    onSelect={(s) => setSelectedStudentId(s.id)}
+                    placeholder="🔍 ค้นหาชื่อ / username นักเรียน..."
+                    emptyText="ไม่พบรายชื่อที่ตรงกัน"
+                  />
                   <select value={selectedStudentId} onChange={(e) => setSelectedStudentId(e.target.value)} className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm bg-blue-50 font-medium focus:ring-blue-500" required>
                     <option value="">-- กรุณาเลือกเด็กนักเรียน --</option>
                     {students.map(s => <option key={s.id} value={s.id}>{s.name || s.username}</option>)}
@@ -272,6 +285,16 @@ export default function ManageCustomCourse() {
               {courseTargetType === 'group' && (
                 <div className="animate-fadeIn">
                   <label className="block text-xs font-bold text-purple-800 uppercase mb-1">เลือกกลุ่มเรียน (Group)</label>
+                  <SearchPicker
+                    items={groups}
+                    value={groupSearch}
+                    onChange={setGroupSearch}
+                    matches={(g, kw) => (g.group_name || '').toLowerCase().includes(kw)}
+                    renderItem={(g) => g.group_name}
+                    onSelect={(g) => setSelectedGroupId(g.id)}
+                    placeholder="🔍 ค้นหาชื่อกลุ่ม..."
+                    emptyText="ไม่พบกลุ่มที่ตรงกัน"
+                  />
                   <select value={selectedGroupId} onChange={(e) => setSelectedGroupId(e.target.value)} className="w-full px-3 py-2 border border-purple-300 rounded-lg text-sm bg-purple-50 font-medium text-purple-950 focus:ring-purple-500" required>
                     <option value="">-- กรุณาเลือกกลุ่มการเรียน --</option>
                     {groups.map(g => <option key={g.id} value={g.id}>{g.group_name}</option>)}

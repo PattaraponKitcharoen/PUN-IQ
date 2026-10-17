@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import SearchPicker from '../../../components/SearchPicker';
 
 export default function ManageParentChildren() {
   const [parents, setParents] = useState([]);
@@ -11,6 +12,7 @@ export default function ManageParentChildren() {
   const [message, setMessage] = useState('');
 
   const [selectedParentId, setSelectedParentId] = useState('');
+  const [parentSearch, setParentSearch] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
@@ -195,6 +197,16 @@ export default function ManageParentChildren() {
               {/* เลือกผู้ปกครอง */}
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">เลือกผู้ปกครองหลัก</label>
+                <SearchPicker
+                  items={parents}
+                  value={parentSearch}
+                  onChange={setParentSearch}
+                  matches={(s, kw) => [s.name, s.username, s.grade].some(v => v && v.toLowerCase().includes(kw))}
+                  renderItem={(p) => <>{p.username} {p.name && <span className="text-gray-400">({p.name})</span>}</>}
+                  onSelect={(p) => setSelectedParentId(p.id)}
+                  placeholder="🔍 ค้นหาชื่อ / username ผู้ปกครอง..."
+                  emptyText="ไม่พบผู้ปกครองที่ตรงกัน"
+                />
                 <select 
                   value={selectedParentId} 
                   onChange={(e) => setSelectedParentId(e.target.value)} 
