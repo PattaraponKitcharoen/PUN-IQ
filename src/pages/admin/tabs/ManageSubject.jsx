@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import Pagination from '../../../components/Pagination';
 
 export default function ManageSubject() {
   const [subjects, setSubjects] = useState([]);
@@ -157,31 +158,7 @@ export default function ManageSubject() {
 
           {/* 🔴 5. แทรก UI แถบ Pagination */}
           {subjects.length > 0 && (
-             <div className="flex justify-center items-center p-4 border-t border-gray-100 space-x-6 mt-auto">
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                disabled={currentPage === 1}
-                className="p-1.5 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              
-              <div className="text-xs font-semibold text-gray-700 bg-gray-50 px-3 py-1 rounded-lg border border-gray-200">
-                หน้า {currentPage} / {totalPages}
-              </div>
-
-              <button 
-                onClick={() => setCurrentPage(p => p + 1)} 
-                disabled={currentPage === totalPages}
-                className="p-1.5 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+             <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} size="sm" className="border-t border-gray-100 mt-auto" />
           )}
         </div>
       </div>

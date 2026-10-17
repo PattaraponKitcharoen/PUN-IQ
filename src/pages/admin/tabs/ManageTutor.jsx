@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../../lib/supabase';
+import Pagination from '../../../components/Pagination';
 import AddTutorModal from '../modals/AddTutorModal';
 import EditTutorInfoModal from '../modals/EditTutorInfoModal';
 import ConfirmResetPasswordModal from '../modals/ConfirmResetPasswordModal';
@@ -195,33 +196,7 @@ export default function ManageTutor() {
               </tbody>
             </table>
             
-            <div className="flex justify-center items-center p-4 border-t border-gray-200 space-x-6 bg-gray-50/30">
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                disabled={currentPage === 1}
-                className="p-2 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-                title="หน้าก่อนหน้า"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              
-              <div className="text-sm font-semibold text-gray-700 bg-white px-4 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                หน้า {currentPage} <span className="text-gray-400 font-normal mx-1">จาก</span> {totalPages}
-              </div>
-
-              <button 
-                onClick={() => setCurrentPage(p => p + 1)} 
-                disabled={currentPage === totalPages}
-                className="p-2 bg-white border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-                title="หน้าถัดไป"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} className="border-t border-gray-200 bg-gray-50/30" />
 
           </div>
         )}
