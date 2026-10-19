@@ -90,6 +90,7 @@ export async function exportMonthlyReport(selectedMonth) {
   const studentMap = {};
   const tutorMap = {};
   const roomMap = {};
+  const lineMap = {};
   const totals = { hours: 0, revenue: 0, cost: 0, roomRevenue: 0 };
   const rawRows = [];
 
@@ -117,6 +118,20 @@ export async function exportMonthlyReport(selectedMonth) {
       'ค่าครู': round2(c.cost),
       'ค่าเช่าห้อง': round2(c.roomRevenue),
     });
+
+    // รวมแบบเดียวกับบิล: นักเรียน + ครู + ประเภท + วิชา/คอร์ส + เรท + ระดับชั้น
+    const contentGrade = log.learning_type === 'course' || c.isClassroom ? (log.custom_courses?.grade_level || '') : (log.grade_level || '');
+    const lineKey = [studentKey, log.tutor_id, c.isClassroom ? 'room' : log.learning_type, log.subject_id || '', log.custom_course_id || '', log.applied_student_rate, contentGrade].join('|');
+    if (!lineMap[lineKey]) {
+      lineMap[lineKey] = { student, tutor: log.tutor || {}, isClassroom: c.isClassroom, learningType: log.learning_type, item, contentGrade, studentRate: Number(log.applied_student_rate) || 0, tutorRate: Number(log.applied_tutor_rate) || 0, dates: [], sessions: 0, hours: 0, rounds: 0, amount: 0, cost: 0 };
+    }
+    const line = lineMap[lineKey];
+    line.dates.push(log.teaching_date);
+    line.sessions += 1;
+    line.hours += c.hrs;
+    line.rounds += c.rounds;
+    line.amount += c.isClassroom ? c.roomRevenue : c.revenue;
+    line.cost += c.cost;
 
     if (!studentMap[studentKey]) {
       studentMap[studentKey] = { student, subjects: new Set(), sessions: 0, hours: 0, revenue: 0, roomRevenue: 0 };
@@ -197,6 +212,25 @@ export async function exportMonthlyReport(selectedMonth) {
       'ยอดค่าเช่า': round2(amount),
     }));
 
+  const lineRows = Object.values(lineMap)
+    .sort((a, b) => byUsername(a.student, b.student) || a.dates[0].localeCompare(b.dates[0]))
+    .map((l) => ({
+      'รหัสนักเรียน': l.student.username || '-',
+      'ชื่อเล่น': l.student.name || '-',
+      'ประเภท': l.isClassroom ? 'เช่าห้อง' : (LEARNING_TYPE_LABEL[l.learningType] || l.learningType || '-'),
+      'วิชา / คอร์ส': l.item,
+      'ระดับชั้นเนื้อหา': l.contentGrade || '-',
+      'ครูผู้สอน': l.isClassroom ? '🏠 Classroom' : (l.tutor.name || l.tutor.username || '-'),
+      'จำนวนครั้ง': l.sessions,
+      'รวมชม.': round2(l.hours),
+      'จำนวนรอบ (เช่าห้อง)': l.isClassroom ? round2(l.rounds) : '',
+      'เรท': round2(l.studentRate),
+      'เป็นเงิน': round2(l.amount),
+      'เรทครู': l.isClassroom ? '' : round2(l.tutorRate),
+      'ค่าครู': round2(l.cost),
+      'วันที่เรียน': [...new Set(l.dates.map(d => Number(d.slice(8, 10))))].join(', '),
+    }));
+
   const sum = (rows, key) => round2(rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0));
   const withTotal = (rows, labelKey, sumKeys) => rows.length === 0 ? rows : [
     ...rows,
@@ -243,6 +277,10 @@ export async function exportMonthlyReport(selectedMonth) {
     withTotal(roomRows, 'รหัสผู้เช่า', ['จำนวนครั้ง', 'รวมชม.ใช้งาน', 'จำนวนรอบ', 'ยอดค่าเช่า']),
     ['รหัสผู้เช่า', 'ชื่อผู้เช่า', 'แพ็กเกจ', 'จำนวนครั้ง', 'รวมชม.ใช้งาน', 'จำนวนรอบ', 'ยอดค่าเช่า'],
   ), 'ค่าเช่าห้อง');
+  XLSX.utils.book_append_sheet(wb, makeSheet(
+    withTotal(lineRows, 'รหัสนักเรียน', ['จำนวนครั้ง', 'รวมชม.', 'เป็นเงิน', 'ค่าครู']),
+    ['รหัสนักเรียน', 'ชื่อเล่น', 'ประเภท', 'วิชา / คอร์ส', 'ระดับชั้นเนื้อหา', 'ครูผู้สอน', 'จำนวนครั้ง', 'รวมชม.', 'จำนวนรอบ (เช่าห้อง)', 'เรท', 'เป็นเงิน', 'เรทครู', 'ค่าครู', 'วันที่เรียน'],
+  ), 'ข้อมูลดิบแบบสรุป');
   XLSX.utils.book_append_sheet(wb, makeSheet(rawRows,
     ['วันที่', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'ชม.', 'ครู / สถานที่', 'รหัสนักเรียน', 'ชื่อนักเรียน', 'ประเภท', 'วิชา / คอร์ส', 'ระดับชั้นเนื้อหา', 'หัวข้อ / หมายเหตุ', 'เรทนักเรียน', 'เรทครู', 'ค่าเรียน', 'ค่าครู', 'ค่าเช่าห้อง'],
   ), 'ข้อมูลดิบ');
