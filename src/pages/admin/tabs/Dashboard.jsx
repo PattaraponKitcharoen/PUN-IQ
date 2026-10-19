@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { exportMonthlyReport } from '../../../lib/exportMonthlyReport';
 
 export default function Dashboard() {
   // 🔴 1. เพิ่ม State เก็บค่าเดือน (ค่าเริ่มต้นคือเดือนปัจจุบัน)
@@ -23,7 +24,19 @@ export default function Dashboard() {
     teachingProfit: 0 
   });
   const [breakdownData, setBreakdownData] = useState({ revenue: [], expense: [], roomRevenue: [] });
-  const [activeModal, setActiveModal] = useState(null); 
+  const [activeModal, setActiveModal] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportMonthlyReport(selectedMonth);
+    } catch (err) {
+      alert(`❌ Export ไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const [recentLogs, setRecentLogs] = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -242,6 +255,15 @@ export default function Dashboard() {
             }} 
             className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-auto"
           />
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title="ดาวน์โหลดสรุปนักเรียน ครู ค่าเช่าห้อง และข้อมูลดิบของเดือนนี้เป็นไฟล์ Excel"
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition shadow-sm whitespace-nowrap disabled:opacity-60 disabled:cursor-wait"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            <span>{exporting ? 'กำลังสร้างไฟล์...' : 'Export Excel'}</span>
+          </button>
         </div>
       </div>
 
