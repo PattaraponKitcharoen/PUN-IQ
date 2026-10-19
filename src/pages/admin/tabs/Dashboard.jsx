@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { exportMonthlyReport } from '../../../lib/exportMonthlyReport';
+import { exportMonthlyReport, fetchAllLogs, calcLog, getItemLabel, LEARNING_TYPE_LABEL } from '../../../lib/exportMonthlyReport';
+
+const DASHBOARD_LOG_SELECT = 'teaching_date, start_time, end_time, duration_hours, learning_type, grade_level, topic, applied_student_rate, applied_tutor_rate, student:users!teaching_logs_student_id_fkey(id, name, username), tutor:users!teaching_logs_tutor_id_fkey(id, name, username), subjects(subject_name), custom_courses(course_name, grade_level)';
 
 export default function Dashboard() {
   // 🔴 1. เพิ่ม State เก็บค่าเดือน (ค่าเริ่มต้นคือเดือนปัจจุบัน)
@@ -26,6 +28,8 @@ export default function Dashboard() {
   const [breakdownData, setBreakdownData] = useState({ revenue: [], expense: [], roomRevenue: [] });
   const [activeModal, setActiveModal] = useState(null);
   const [exporting, setExporting] = useState(false);
+  // แถวที่กางดูรายละเอียดอยู่ เก็บเป็น `${modal}:${key}` จึงไม่ค้างข้ามหน้าต่าง
+  const [expandedRow, setExpandedRow] = useState(null);
 
   const handleExport = async () => {
     setExporting(true);
@@ -61,15 +65,12 @@ export default function Dashboard() {
         { count: studentCount },
         { count: tutorCount },
         { count: groupCount },
-        { data: logsData }
+        logsData
       ] = await Promise.all([
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'tutor').neq('username', 'Classroom'),
         supabase.from('groups').select('*', { count: 'exact', head: true }),
-        supabase.from('teaching_logs')
-          .select('duration_hours, applied_student_rate, applied_tutor_rate, topic, users!teaching_logs_student_id_fkey(name, username), tutor:users!teaching_logs_tutor_id_fkey(name, username), custom_courses(course_name)')
-          .gte('teaching_date', startDate)
-          .lte('teaching_date', endDate)
+        fetchAllLogs(startDate, endDate, DASHBOARD_LOG_SELECT).catch(() => [])
       ]);
 
       let totalHours = 0;
@@ -80,48 +81,48 @@ export default function Dashboard() {
       let expMap = {};
       let roomMap = {}; 
 
-      if (logsData) {
-        logsData.forEach(log => {
-          const hrs = Number(log.duration_hours) || 0;
-          const studentName = log.users?.name || log.users?.username || 'ไม่ระบุชื่อ';
+      // เก็บยอดรวมพร้อมรายการย่อยของแต่ละคน (ใช้ id เป็น key กันชื่อซ้ำ)
+      const addEntry = (map, key, name, amount, item) => {
+        if (!map[key]) map[key] = { key, name, amount: 0, hours: 0, items: [] };
+        map[key].amount += amount;
+        map[key].hours += item.hours;
+        map[key].items.push(item);
+      };
 
-          if (log.tutor?.username === 'Classroom') {
-            let roomRate = Number(log.applied_student_rate) || 0;
-            let rounds = 1;
-            const courseName = log.custom_courses?.course_name || '';
-          
-            const match = courseName.match(/([\d.]+)\s*ชม\.\/รอบ/);
-            if (match) {
-              const hrsPerRound = Number(match[1]);
-              rounds = hrs / hrsPerRound; 
-            }
-          
-            const rev = rounds * roomRate; 
-            totalRoomRental += rev;
+      logsData.forEach(log => {
+        const c = calcLog(log);
+        const studentKey = log.student?.id || 'unknown-student';
+        const studentName = log.student?.name || log.student?.username || 'ไม่ระบุชื่อ';
+        const tutorName = log.tutor?.name || log.tutor?.username || 'ไม่ระบุชื่อครู';
+        const base = {
+          date: log.teaching_date,
+          start: log.start_time,
+          end: log.end_time,
+          hours: c.hrs,
+          label: getItemLabel(log, c.isClassroom),
+          type: c.isClassroom ? 'room' : log.learning_type,
+          grade: log.learning_type === 'course' || c.isClassroom ? log.custom_courses?.grade_level : log.grade_level,
+          topic: log.topic,
+        };
 
-            if (!roomMap[studentName]) roomMap[studentName] = 0;
-            roomMap[studentName] += rev;
-          } else {
-            const rev = hrs * (Number(log.applied_student_rate) || 0);
-            const exp = hrs * (Number(log.applied_tutor_rate) || 0);
+        if (c.isClassroom) {
+          totalRoomRental += c.roomRevenue;
+          addEntry(roomMap, studentKey, studentName, c.roomRevenue, { ...base, who: `${c.rounds.toLocaleString(undefined, { maximumFractionDigits: 2 })} รอบ`, rate: Number(log.applied_student_rate) || 0, amount: c.roomRevenue });
+        } else {
+          totalHours += c.hrs;
+          totalTeachingRev += c.revenue; 
+          totalExp += c.cost;
+          addEntry(revMap, studentKey, studentName, c.revenue, { ...base, who: tutorName, rate: Number(log.applied_student_rate) || 0, amount: c.revenue });
+          addEntry(expMap, log.tutor?.id || 'unknown-tutor', tutorName, c.cost, { ...base, who: studentName, rate: Number(log.applied_tutor_rate) || 0, amount: c.cost });
+        }
+      });
 
-            totalHours += hrs;
-            totalTeachingRev += rev; 
-            totalExp += exp;
-
-            if (!revMap[studentName]) revMap[studentName] = 0;
-            revMap[studentName] += rev;
-
-            const tutorName = log.tutor?.name || log.tutor?.username || 'ไม่ระบุชื่อครู';
-            if (!expMap[tutorName]) expMap[tutorName] = 0;
-            expMap[tutorName] += exp;
-          }
-        });
-      }
-
-      const revArray = Object.keys(revMap).map(name => ({ name, amount: revMap[name] })).sort((a,b) => b.amount - a.amount);
-      const expArray = Object.keys(expMap).map(name => ({ name, amount: expMap[name] })).sort((a,b) => b.amount - a.amount);
-      const roomArray = Object.keys(roomMap).map(name => ({ name, amount: roomMap[name] })).sort((a,b) => b.amount - a.amount);
+      const toSortedArray = (map) => Object.values(map)
+        .map(entry => ({ ...entry, items: entry.items.sort((a, b) => `${a.date}${a.start || ''}`.localeCompare(`${b.date}${b.start || ''}`)) }))
+        .sort((a, b) => b.amount - a.amount);
+      const revArray = toSortedArray(revMap);
+      const expArray = toSortedArray(expMap);
+      const roomArray = toSortedArray(roomMap);
 
       const teachingProfit = totalTeachingRev - totalExp;
       const finalProfit = teachingProfit + totalRoomRental; 
@@ -193,7 +194,8 @@ export default function Dashboard() {
           total: financialStats.revenue,
           bgHeader: 'bg-green-600',
           textAmount: 'text-green-600',
-          colName: 'ชื่อนักเรียน'
+          colName: 'ชื่อนักเรียน',
+          whoLabel: 'ครูผู้สอน'
         };
       case 'expense':
         return {
@@ -202,7 +204,8 @@ export default function Dashboard() {
           total: financialStats.expense,
           bgHeader: 'bg-red-500',
           textAmount: 'text-red-500',
-          colName: 'ชื่อคุณครูผู้สอน'
+          colName: 'ชื่อคุณครูผู้สอน',
+          whoLabel: 'นักเรียน'
         };
       case 'roomRevenue':
         return {
@@ -211,7 +214,8 @@ export default function Dashboard() {
           total: financialStats.roomRevenue,
           bgHeader: 'bg-emerald-600',
           textAmount: 'text-emerald-600',
-          colName: 'ชื่อผู้เช่า (นักเรียน)'
+          colName: 'ชื่อผู้เช่า (นักเรียน)',
+          whoLabel: 'จำนวนรอบ'
         };
       case 'profit':
         return {
@@ -445,11 +449,11 @@ export default function Dashboard() {
 
       {modalConfig && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setActiveModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
             <div className={`p-5 border-b flex justify-between items-center text-white ${modalConfig.bgHeader}`}>
               <div>
                 <h3 className="font-bold text-lg">{modalConfig.title}</h3>
-                <p className="text-sm opacity-90 mt-0.5">ประจำเดือนที่เลือก</p>
+                <p className="text-sm opacity-90 mt-0.5">ประจำเดือนที่เลือก{!modalConfig.isProfit && ' · กดที่ชื่อเพื่อดูรายละเอียด'}</p>
               </div>
               <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-white/20 rounded-lg transition">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -465,18 +469,88 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
-                  {modalConfig.data.map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50 transition">
-                      <td className="p-4 font-medium text-gray-800">
-                        {modalConfig.isProfit && item.name.includes('เช่า') && '🏠 '}
-                        {modalConfig.isProfit && item.name.includes('สอน') && '📚 '}
-                        {item.name}
-                      </td>
-                      <td className={`p-4 text-right font-bold ${modalConfig.textAmount}`}>
-                        {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  ))}
+                  {modalConfig.data.map((item, index) => {
+                    const rowId = `${activeModal}:${item.key ?? index}`;
+                    const canExpand = Array.isArray(item.items) && item.items.length > 0;
+                    const isExpanded = expandedRow === rowId;
+                    return (
+                      <Fragment key={rowId}>
+                        <tr
+                          onClick={canExpand ? () => setExpandedRow(isExpanded ? null : rowId) : undefined}
+                          className={`transition ${canExpand ? 'cursor-pointer hover:bg-gray-50' : ''} ${isExpanded ? 'bg-gray-50' : ''}`}
+                        >
+                          <td className="p-4 font-medium text-gray-800">
+                            <div className="flex items-center space-x-2">
+                              {canExpand && (
+                                <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                              )}
+                              <div>
+                                <p>
+                                  {modalConfig.isProfit && item.name.includes('เช่า') && '🏠 '}
+                                  {modalConfig.isProfit && item.name.includes('สอน') && '📚 '}
+                                  {item.name}
+                                </p>
+                                {canExpand && (
+                                  <p className="text-xs text-gray-400 font-normal mt-0.5">
+                                    {item.items.length} ครั้ง · {item.hours.toLocaleString(undefined, { maximumFractionDigits: 2 })} ชม.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className={`p-4 text-right font-bold ${modalConfig.textAmount}`}>
+                            {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan="2" className="px-4 pb-4 pt-0 bg-gray-50">
+                              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-gray-100 text-gray-500">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">วันที่</th>
+                                      <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">เวลา</th>
+                                      <th className="px-3 py-2 text-left font-semibold">{modalConfig.whoLabel}</th>
+                                      <th className="px-3 py-2 text-left font-semibold">รายการ</th>
+                                      <th className="px-3 py-2 text-right font-semibold">ชม.</th>
+                                      <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">เรท</th>
+                                      <th className="px-3 py-2 text-right font-semibold">เงิน</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {item.items.map((d, i) => (
+                                      <tr key={i} className="align-top">
+                                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                                          {new Date(d.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                                          {d.start && d.end ? `${formatTime(d.start)}-${formatTime(d.end)}` : '-'}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-800 font-medium">{d.who}</td>
+                                        <td className="px-3 py-2 text-gray-700">
+                                          <span className="font-medium">{d.label}</span>
+                                          <span className="text-gray-400 ml-1">
+                                            ({d.type === 'room' ? 'เช่าห้อง' : (LEARNING_TYPE_LABEL[d.type] || d.type)}{d.grade ? ` · ${d.grade}` : ''})
+                                          </span>
+                                          {d.topic && <p className="text-gray-400 mt-0.5 truncate max-w-[220px]" title={d.topic}>{d.topic}</p>}
+                                        </td>
+                                        <td className="px-3 py-2 text-right text-gray-700">{d.hours.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                                        <td className="px-3 py-2 text-right text-gray-500">{d.rate.toLocaleString()}</td>
+                                        <td className={`px-3 py-2 text-right font-bold ${modalConfig.textAmount}`}>
+                                          {d.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                   {modalConfig.data.length === 0 && (
                     <tr>
                       <td colSpan="2" className="p-8 text-center text-gray-400">ยังไม่มียอดเงินในเดือนที่เลือก</td>

@@ -1,18 +1,20 @@
 import { supabase } from './supabase';
 
+const LOG_SELECT = '*, student:users!teaching_logs_student_id_fkey(id, name, username, grade, phone, school_name, parent_name), tutor:users!teaching_logs_tutor_id_fkey(id, name, username), subjects(subject_name), custom_courses(course_name, grade_level)';
+
 // Supabase คืนได้สูงสุด 1,000 แถวต่อครั้ง จึงต้องดึงทีละหน้าจนครบ
 const PAGE_SIZE = 1000;
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const formatTime = (t) => (t ? t.substring(0, 5) : '');
+export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+export const formatTime = (t) => (t ? t.substring(0, 5) : '');
 
-const LEARNING_TYPE_LABEL = {
+export const LEARNING_TYPE_LABEL = {
   general: 'ทั่วไป',
   advanced: 'แอดวานซ์',
   course: 'คอร์สพิเศษ',
 };
 
-const getMonthRange = (selectedMonth) => {
+export const getMonthRange = (selectedMonth) => {
   const [year, month] = selectedMonth.split('-');
   const lastDay = new Date(Number(year), Number(month), 0).getDate();
   return {
@@ -21,12 +23,12 @@ const getMonthRange = (selectedMonth) => {
   };
 };
 
-const fetchAllLogs = async (startDate, endDate) => {
+export const fetchAllLogs = async (startDate, endDate, select = LOG_SELECT) => {
   const all = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('teaching_logs')
-      .select('*, student:users!teaching_logs_student_id_fkey(id, name, username, grade, phone, school_name, parent_name), tutor:users!teaching_logs_tutor_id_fkey(id, name, username), subjects(subject_name), custom_courses(course_name, grade_level)')
+      .select(select)
       .gte('teaching_date', startDate)
       .lte('teaching_date', endDate)
       .order('teaching_date', { ascending: true })
@@ -39,8 +41,8 @@ const fetchAllLogs = async (startDate, endDate) => {
   }
 };
 
-// คำนวณเงินของแต่ละรายการ (สูตรเดียวกับหน้า Dashboard)
-const calcLog = (log) => {
+// คำนวณเงินของแต่ละรายการ (ใช้ร่วมกับหน้า Dashboard)
+export const calcLog = (log) => {
   const hrs = Number(log.duration_hours) || 0;
   const isClassroom = log.tutor?.username === 'Classroom';
 
@@ -61,7 +63,7 @@ const calcLog = (log) => {
   };
 };
 
-const getItemLabel = (log, isClassroom) => {
+export const getItemLabel = (log, isClassroom) => {
   if (isClassroom) return log.custom_courses?.course_name || 'เช่าสถานที่';
   if (log.learning_type === 'course') return log.custom_courses?.course_name || 'คอร์สพิเศษ';
   return log.subjects?.subject_name || '-';
