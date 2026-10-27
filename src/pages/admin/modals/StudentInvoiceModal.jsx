@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import StudentInvoice from '../StudentInvoice';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { getInvoiceFileBase } from '../../../lib/invoiceNames';
 
 export default function StudentInvoiceModal({ isOpen, onClose, student, logs, totalAmount, billingMonth, companyAccount }) {
   const invoiceRef = useRef(null);
@@ -33,7 +34,7 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
 
       const link = document.createElement('a');
       link.href = dataUrl;
-      link.download = `Invoice_${student.username}_${billingMonth}.png`;
+      link.download = `${getInvoiceFileBase(student, billingMonth)}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -80,7 +81,7 @@ export default function StudentInvoiceModal({ isOpen, onClose, student, logs, to
       const pdfHeight = (node.scrollHeight * pdfWidth) / node.scrollWidth;
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Invoice_${student.username}_${billingMonth}.pdf`);
+      pdf.save(`${getInvoiceFileBase(student, billingMonth)}.pdf`);
     } catch (error) {
       console.error('Error saving PDF:', error);
       alert(`เกิดข้อผิดพลาดในการบันทึก PDF: ${error.message}`);

@@ -12,6 +12,7 @@ import TutorPayslip from '../TutorPayslip';
 // 🔴 1. ใช้ toPng (กันบั๊ก oklch ของ Tailwind) และ jsPDF สำหรับทำไฟล์ PDF ใน ZIP
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { getInvoiceFileBase } from '../../../lib/invoiceNames';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState('tutor');
@@ -345,7 +346,9 @@ export default function Billing() {
                 }
               } else {
                 const base64Data = dataUrl.split(',')[1];
-                const fileName = `${prefix}_${userData.user.username}_${selectedMonth}.png`;
+                const fileName = activeTab === 'tutor'
+                  ? `${prefix}_${userData.user.username}_${selectedMonth}.png`
+                  : `${getInvoiceFileBase(userData.user, selectedMonth)}.png`;
                 imgFolder.file(fileName, base64Data, { base64: true });
               }
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { getStudentDisplayName } from '../../lib/invoiceNames';
 
 export default function StudentInvoice({ student, logs, totalAmount, billingMonth, issueDate = new Date(), companyAccount }) {
   const [expandedGroups, setExpandedGroups] = useState([]);
@@ -104,7 +105,7 @@ export default function StudentInvoice({ student, logs, totalAmount, billingMont
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 items-center">
             <p className="flex items-center">
               <span className="text-gray-600 w-16 shrink-0">ชื่อผู้เรียน</span> 
-              <span className="font-semibold bg-[#dcebf8] px-2 py-0.5 rounded-full text-[#1b4379] truncate">{student.name || student.username}</span>
+              <span className="font-semibold bg-[#dcebf8] px-2 py-0.5 rounded-full text-[#1b4379] truncate">{getStudentDisplayName(student)}</span>
             </p>
             <p className="text-right"><span className="text-gray-600 mr-2">ระดับชั้น</span> <span className="font-semibold">{student.grade || '-'}</span></p>
             <p className="flex items-center"><span className="text-gray-600 w-16 shrink-0">วันที่</span> <span className="font-semibold">{issueDate.toLocaleDateString('th-TH', { day: 'numeric', month: 'numeric', year: 'numeric' })}</span></p>
