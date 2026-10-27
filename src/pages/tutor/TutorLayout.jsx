@@ -7,6 +7,7 @@ import TutorBilling from './tabs/TutorBilling';
 import HistoryLog from './tabs/HistoryLog';
 // 🔴 2. อย่าลืมนำเข้าหน้า Edit ด้วย
 import EditTimeLog from './tabs/EditTimeLog'; 
+import MyStudents from './tabs/MyStudents';
 
 export default function TutorLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -36,6 +37,7 @@ export default function TutorLayout() {
           <Route path="history" element={<HistoryLog />} />
           <Route path="billing" element={<TutorBilling />} />
           <Route path="edit-log" element={<EditTimeLog />} />
+          <Route path="students" element={<MyStudents />} />
         </Routes>
       </main>
     </div>

@@ -1,4 +1,4 @@
-// ชื่อที่แสดงในบิลนักเรียน: "SPIQH001 - เธียร" (ไม่มีชื่อ = ใช้รหัสอย่างเดียว)
+// ชื่อที่แสดงในบิลนักเรียน: "SPIQH001 - สมชาย" (ไม่มีชื่อ = ใช้รหัสอย่างเดียว)
 export const getStudentDisplayName = (student) => {
   const code = student?.username || '';
   const name = student?.name || '';
@@ -6,7 +6,7 @@ export const getStudentDisplayName = (student) => {
   return code || name;
 };
 
-// ชื่อไฟล์บิลนักเรียน: Invoice_SPIQH001-เธียร_2026-10 (ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้ออก)
+// ชื่อไฟล์บิลนักเรียน: Invoice_SPIQH001-สมชาย_2026-10 (ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้ออก)
 export const getInvoiceFileBase = (student, billingMonth) => {
   const code = student?.username || '';
   const name = student?.name || '';
