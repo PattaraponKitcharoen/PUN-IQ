@@ -19,9 +19,9 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   
   const currentUserId = useRef(null);
 
-  // 🔴 4. ปรับปรุงการตรวจสอบบัตร (รับพารามิเตอร์ 2 ตัว)
-  const handleSession = async (session, localSession) => {
-    if (!session && !localSession) {
+  // ตรวจสอบบัตร: ทุกบทบาทล็อกอินผ่าน Supabase Auth แล้วอ่าน role จากตาราง users
+  const handleSession = async (session) => {
+    if (!session) {
       setAuthenticated(false);
       setUserRole(null);
       currentUserId.current = null;
@@ -30,15 +30,6 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     
     setAuthenticated(true);
 
-    // กรณี: เด็ก หรือ ผู้ปกครอง (LocalStorage)
-    if (localSession) {
-      if (currentUserId.current === localSession.id) return;
-      setUserRole(localSession.role);
-      currentUserId.current = localSession.id;
-      return;
-    }
-
-    // กรณี: แอดมิน หรือ ครู (Supabase)
     if (currentUserId.current === session.user.id) return;
 
     try {
@@ -67,38 +58,28 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
     // 1. ตรวจสอบสิทธิ์ทันทีที่โหลดหน้า
     const checkAuth = async () => {
-      // ค้นหาบัตรจาก 2 แหล่ง: Supabase (แอดมิน/ครู) และ LocalStorage (เด็ก/ผู้ปกครอง)
-      const { data: { session } } = await supabase.auth.getSession();
-      const localSessionStr = localStorage.getItem('custom_user_session');
-      const localSession = localSessionStr ? JSON.parse(localSessionStr) : null;
+      // session แบบเก่าของเด็ก/ผู้ปกครอง (เก็บในเครื่อง) ใช้ไม่ได้แล้ว — ลบทิ้ง ให้ล็อกอินใหม่ 1 ครั้ง
+      localStorage.removeItem('custom_user_session');
 
-      // เวอร์ชันเก่าเก็บข้อมูลผู้ใช้ทั้งแถว (รวมรหัสผ่าน) ไว้ในเครื่อง — ลบรหัสผ่านทิ้ง
-      if (localSession && ('password' in localSession || 'password_hash' in localSession)) {
-        delete localSession.password;
-        delete localSession.password_hash;
-        localStorage.setItem('custom_user_session', JSON.stringify(localSession));
-      }
+      const { data: { session } } = await supabase.auth.getSession();
 
       if (isMounted) {
-        await handleSession(session, localSession);
+        await handleSession(session);
         setLoading(false);
       }
     };
     checkAuth();
 
-    // 2. ดักฟังการเปลี่ยนแปลงของ Supabase (จะมีผลแค่กับ แอดมิน/ครู)
+    // 2. ดักฟังการเปลี่ยนแปลงของ Supabase Auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // ถ้าเป็นเด็กหรือผู้ปกครองล็อกอินอยู่ ไม่ต้องสนใจ Event ของ Supabase
-        if (localStorage.getItem('custom_user_session')) return;
-
         if (event === 'SIGNED_OUT' || !session) {
           setAuthenticated(false);
           setUserRole(null);
           currentUserId.current = null;
           setLoading(false);
         } else if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-          await handleSession(session, null);
+          await handleSession(session);
         }
       }
     );
@@ -109,23 +90,11 @@ const ProtectedRoute = ({ children, allowedRole }) => {
     };
   }, []);
 
-  // 3. ตรวจสอบ Role ซ้ำทุกๆ 5 นาที (รองรับทั้ง 2 ระบบ)
+  // 3. ตรวจสอบ Role ซ้ำทุกๆ 5 นาที
   useEffect(() => {
     const interval = setInterval(async () => {
-      const localSessionStr = localStorage.getItem('custom_user_session');
-      let currentId = null;
-      let isSupabase = false;
-
-      if (localSessionStr) {
-        currentId = JSON.parse(localSessionStr).id;
-      } else {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          currentId = session.user.id;
-          isSupabase = true;
-        }
-      }
-
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentId = session?.user?.id;
       if (!currentId) return;
       
       const { data: userData } = await supabase
@@ -133,8 +102,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
       
       // ถ้าโดนลบบัญชีทิ้ง ให้เตะออก
       if (!userData) {
-        if (isSupabase) await supabase.auth.signOut();
-        else localStorage.removeItem('custom_user_session');
+        await supabase.auth.signOut();
         window.location.href = '/login';
         return;
       }

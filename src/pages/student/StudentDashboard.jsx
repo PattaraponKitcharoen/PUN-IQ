@@ -36,17 +36,9 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const fetchInitialData = async () => {
-      // 1. ลองดึงจาก Supabase ก่อน (เผื่อกรณีแอดมินจำลองสิทธิ์เข้ามา)
+      // ใช้ session ของ Supabase Auth (นักเรียนล็อกอินผ่าน Auth แล้ว)
       const { data: { session } } = await supabase.auth.getSession();
       let currentUser = session?.user;
-      
-      // 🔴 2. ถ้าไม่เจอใน Supabase ให้ไปดึงจาก localStorage แทน (สำหรับเด็กที่ล็อกอินแบบใหม่)
-      if (!currentUser) {
-        const localSession = localStorage.getItem('custom_user_session');
-        if (localSession) {
-          currentUser = JSON.parse(localSession);
-        }
-      }
 
       // ถ้าไม่มีข้อมูลใครล็อกอินเลย ให้เด้งกลับหน้า Login
       if (!currentUser) {

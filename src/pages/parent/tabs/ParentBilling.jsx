@@ -22,7 +22,9 @@ export default function ParentBilling() {
 
   useEffect(() => {
     const fetchChildrenAndAccount = async () => {
-      const session = JSON.parse(localStorage.getItem('custom_user_session') || '{}');
+      // ใช้ session ของ Supabase Auth (ผู้ปกครองล็อกอินผ่าน Auth แล้ว)
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      const session = { id: authSession?.user?.id };
       if (!session.id) return;
 
       const [parentRes, accountRes] = await Promise.all([
