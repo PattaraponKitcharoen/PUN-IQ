@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { USERNAME_PREFIXES, useNextUsername } from '../../../lib/usernameCodes';
+import UsernameCodeInput from '../../../components/UsernameCodeInput';
 
 export default function AddStudentModal({ isOpen, onClose }) {
   const [name, setName] = useState(''); 
@@ -12,13 +14,18 @@ export default function AddStudentModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [usernamePrefix, setUsernamePrefix] = useState(USERNAME_PREFIXES.student[0].prefix);
+  const prefixConfig = USERNAME_PREFIXES.student.find(p => p.prefix === usernamePrefix);
+  const nextCode = useNextUsername('student', prefixConfig, isOpen);
 
   if (!isOpen) return null;
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
-      setError('❌ กรุณากรอกข้อมูลชื่อผู้ใช้งานและรหัสผ่านให้ครบถ้วน');
+    // เว้นว่าง Username = ใช้รหัสถัดไปที่ระบบหาให้
+    const finalUsername = username.trim() || nextCode.suggestion;
+    if (!finalUsername || !password.trim()) {
+      setError(nextCode.loading ? '⏳ กำลังหารหัสถัดไป กรุณารอสักครู่' : '❌ กรุณากรอกข้อมูลชื่อผู้ใช้งานและรหัสผ่านให้ครบถ้วน');
       return;
     }
 
@@ -29,7 +36,7 @@ export default function AddStudentModal({ isOpen, onClose }) {
     try {
       // 🔴 เปลี่ยนสถาปัตยกรรม: ยิงตรงเข้าตารางแบบเดียวกับ Parent และบังคับ email: null เพื่อไม่ให้ติดเงื่อนไข "" ซ้ำ
       const payload = {
-        username: username.trim(),
+        username: finalUsername,
         password: password.trim(),
         name: name.trim(),
         phone: phone.trim(),
@@ -43,7 +50,8 @@ export default function AddStudentModal({ isOpen, onClose }) {
       const { error: insertError } = await supabase.from('users').insert([payload]);
       if (insertError) throw insertError;
 
-      setMessage('🎉 สร้างบัญชีนักเรียนใหม่สำเร็จเรียบร้อย!');
+      setMessage(`🎉 สร้างบัญชีนักเรียนใหม่สำเร็จเรียบร้อย! (Username: ${finalUsername})`);
+      nextCode.refresh();
       
       // ล้างค่าฟอร์มกลับเป็นค่าเริ่มต้น
       setName('');
@@ -61,7 +69,8 @@ export default function AddStudentModal({ isOpen, onClose }) {
       
     } catch (err) {
       if (err.message.includes('users_username_key')) {
-        setError('❌ ไม่สามารถสร้างได้: ชื่อผู้ใช้งาน (Username) นี้มีในระบบอยู่แล้ว');
+        setError('❌ ไม่สามารถสร้างได้: ชื่อผู้ใช้งาน (Username) นี้มีในระบบอยู่แล้ว (ระบบหารหัสถัดไปใหม่ให้แล้ว ลองกดบันทึกอีกครั้ง)');
+        nextCode.refresh();
       } else {
         setError(`เกิดข้อผิดพลาด: ${err.message}`);
       }
@@ -104,10 +113,16 @@ export default function AddStudentModal({ isOpen, onClose }) {
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น เด็กชายรักเรียน ดีเด่น" required />
           </div>
 
-          <div>
-            <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อผู้ใช้งาน (Username)</label>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" placeholder="เช่น student_jack" required />
-          </div>
+          <UsernameCodeInput
+            prefixes={USERNAME_PREFIXES.student}
+            selectedPrefix={usernamePrefix}
+            onPrefixChange={setUsernamePrefix}
+            value={username}
+            onChange={setUsername}
+            suggestion={nextCode.suggestion}
+            loading={nextCode.loading}
+            error={nextCode.error}
+          />
           
           {/* 🔴 เปลี่ยนจากอินพุตอีเมลเดิม มาเป็นอินพุตรหัสผ่านตรงๆ */}
           <div>
