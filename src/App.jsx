@@ -72,6 +72,13 @@ const ProtectedRoute = ({ children, allowedRole }) => {
       const localSessionStr = localStorage.getItem('custom_user_session');
       const localSession = localSessionStr ? JSON.parse(localSessionStr) : null;
 
+      // เวอร์ชันเก่าเก็บข้อมูลผู้ใช้ทั้งแถว (รวมรหัสผ่าน) ไว้ในเครื่อง — ลบรหัสผ่านทิ้ง
+      if (localSession && ('password' in localSession || 'password_hash' in localSession)) {
+        delete localSession.password;
+        delete localSession.password_hash;
+        localStorage.setItem('custom_user_session', JSON.stringify(localSession));
+      }
+
       if (isMounted) {
         await handleSession(session, localSession);
         setLoading(false);

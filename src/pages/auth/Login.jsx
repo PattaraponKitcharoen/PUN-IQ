@@ -36,27 +36,22 @@ export default function Login() {
     const GENERIC_ERROR = 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง';
 
     try {
-      // 1. ค้นหาข้อมูลผู้ใช้จากตาราง users ก่อน
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username)
-        .single();
+      // 1. ตรวจสอบที่ฝั่ง server (ฟังก์ชัน login_lookup) — หน้าเว็บไม่ได้เห็นรหัสผ่านใน DB อีกต่อไป
+      //    นักเรียน/ผู้ปกครอง: server ตรวจรหัสผ่านให้แล้วคืนข้อมูล session
+      //    แอดมิน/ครู: server คืนเฉพาะ email เพื่อไปล็อกอินกับ Supabase Auth ต่อ
+      const { data: userData, error: lookupError } = await supabase.rpc('login_lookup', {
+        p_username: username,
+        p_password: password,
+      });
 
-      if (userError || !userData) {
+      if (lookupError || !userData) {
         setError(GENERIC_ERROR);
         setLoading(false);
         return;
       }
 
-      // 🔴 2. แยกระบบล็อกอิน (สำหรับเด็ก และ ผู้ปกครอง ใช้รหัสผ่านธรรมดา)
+      // 🔴 2. นักเรียน และ ผู้ปกครอง (ผ่านการตรวจรหัสผ่านจาก server แล้ว)
       if (userData.role === 'student' || userData.role === 'parent') {
-        if (userData.password !== password) {
-          setError(GENERIC_ERROR);
-          setLoading(false);
-          return;
-        }
-        
         // จำลอง Session ไว้ในเครื่อง (เพื่อให้หน้าอื่นๆ รู้ว่าใครล็อกอินอยู่)
         localStorage.setItem('custom_user_session', JSON.stringify(userData));
         

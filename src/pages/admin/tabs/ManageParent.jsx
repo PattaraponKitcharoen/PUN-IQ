@@ -19,7 +19,8 @@ export default function ManageParent() {
     setLoading(true);
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      // ระบุคอลัมน์ชัดเจน (คอลัมน์รหัสผ่านถูกซ่อน select('*') จะใช้ไม่ได้)
+      .select('id, name, username, email, phone, created_at')
       .eq('role', 'parent')
       .order('created_at', { ascending: false });
 

@@ -67,8 +67,8 @@ export default function Dashboard() {
         { count: groupCount },
         logsData
       ] = await Promise.all([
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'tutor').neq('username', 'Classroom'),
+        supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+        supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'tutor').neq('username', 'Classroom'),
         supabase.from('groups').select('*', { count: 'exact', head: true }),
         fetchAllLogs(startDate, endDate, DASHBOARD_LOG_SELECT).catch(() => [])
       ]);
