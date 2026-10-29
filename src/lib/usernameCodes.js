@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
-// รูปแบบรหัส (Username) ที่ใช้รันอัตโนมัติของแต่ละบทบาท
-export const USERNAME_PREFIXES = {
+// รูปแบบรหัสตั้งต้น — ใช้เมื่อยังไม่มีตาราง username_prefixes ในฐานข้อมูล
+export const DEFAULT_USERNAME_PREFIXES = {
   student: [
     { prefix: 'SPIQH', digits: 3 },
     { prefix: 'SPIQP', digits: 3 },
@@ -13,6 +13,57 @@ export const USERNAME_PREFIXES = {
     { prefix: 'P', digits: 2 },
   ],
 };
+
+// โหลดรูปแบบรหัสของบทบาทนี้จากตาราง username_prefixes (แอดมินเพิ่ม/ลบได้)
+// ถ้าอ่านตารางไม่ได้ (ยังไม่ได้สร้าง) จะใช้ชุดตั้งต้นและปิดการเพิ่ม/ลบ (tableReady = false)
+export function useUsernamePrefixes(role, enabled) {
+  const [reloadToken, setReloadToken] = useState(0);
+  const [result, setResult] = useState({ key: null, list: null, tableReady: false });
+  const key = `${role}|${reloadToken}`;
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    supabase
+      .from('username_prefixes')
+      .select('id, prefix, digits, sort_order')
+      .eq('role', role)
+      .order('sort_order')
+      .order('prefix')
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data || data.length === 0) {
+          setResult({ key, list: DEFAULT_USERNAME_PREFIXES[role], tableReady: !error });
+        } else {
+          setResult({ key, list: data, tableReady: true });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [enabled, key, role]);
+
+  const prefixes = result.list || DEFAULT_USERNAME_PREFIXES[role];
+  const reload = () => setReloadToken(t => t + 1);
+
+  const add = async (rawPrefix, digits) => {
+    const prefix = rawPrefix.trim().toUpperCase();
+    if (!/^[A-Z]{1,10}$/.test(prefix)) throw new Error('รหัสต้องเป็นตัวอักษรภาษาอังกฤษ 1-10 ตัว');
+    if (!(digits >= 1 && digits <= 5)) throw new Error('จำนวนหลักต้องอยู่ระหว่าง 1-5');
+    if (prefixes.some(p => p.prefix === prefix)) throw new Error(`มีรูปแบบ ${prefix} อยู่แล้ว`);
+    const sortOrder = Math.max(0, ...prefixes.map(p => p.sort_order || 0)) + 10;
+    const { error } = await supabase.from('username_prefixes').insert([{ role, prefix, digits, sort_order: sortOrder }]);
+    if (error) throw error;
+    reload();
+    return prefix;
+  };
+
+  const remove = async (id) => {
+    const { error } = await supabase.from('username_prefixes').delete().eq('id', id);
+    if (error) throw error;
+    reload();
+  };
+
+  return { prefixes, tableReady: result.tableReady, add, remove };
+}
 
 // หาเลขที่มากที่สุดของ prefix นี้ (นับเฉพาะบทบาทเดียวกัน) แล้ว +1
 // ตัวอย่าง: มี SPIQH50, SPIQH070 → ได้ SPIQH071 / มี K24ปิง → ได้ K25

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { USERNAME_PREFIXES, useNextUsername } from '../../../lib/usernameCodes';
+import { useUsernamePrefixes, useNextUsername } from '../../../lib/usernameCodes';
+import UsernamePrefixPicker from '../../../components/UsernamePrefixPicker';
 
 // 🔴 ลบ createClient และ Service Key ออกทั้งหมด เพื่อความปลอดภัย
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -13,8 +14,9 @@ export default function AddTutorModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [usernamePrefix, setUsernamePrefix] = useState(USERNAME_PREFIXES.tutor[0].prefix);
-  const prefixConfig = USERNAME_PREFIXES.tutor.find(p => p.prefix === usernamePrefix);
+  const [usernamePrefix, setUsernamePrefix] = useState('');
+  const prefixSet = useUsernamePrefixes('tutor', isOpen);
+  const prefixConfig = prefixSet.prefixes.find(p => p.prefix === usernamePrefix) || prefixSet.prefixes[0];
   const nextCode = useNextUsername('tutor', prefixConfig, isOpen);
 
   if (!isOpen) return null;
@@ -124,18 +126,14 @@ export default function AddTutorModal({ isOpen, onClose }) {
 
           <div>
             <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-2">รูปแบบรหัสครู</label>
-            <div className="flex bg-gray-100 p-1 rounded-lg text-xs font-bold">
-              {USERNAME_PREFIXES.tutor.map(({ prefix, digits }) => (
-                <button
-                  key={prefix}
-                  type="button"
-                  onClick={() => setUsernamePrefix(prefix)}
-                  className={`flex-1 py-1.5 rounded-md transition ${usernamePrefix === prefix ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  {prefix}{'X'.repeat(digits)}
-                </button>
-              ))}
-            </div>
+            <UsernamePrefixPicker
+              prefixes={prefixSet.prefixes}
+              selectedPrefix={prefixConfig.prefix}
+              onSelect={setUsernamePrefix}
+              tableReady={prefixSet.tableReady}
+              onAdd={prefixSet.add}
+              onRemove={prefixSet.remove}
+            />
             {nextCode.error && <p className="text-[11px] text-red-500 mt-1">หารหัสถัดไปไม่สำเร็จ: {nextCode.error}</p>}
           </div>
 

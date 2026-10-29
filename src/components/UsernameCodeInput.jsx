@@ -1,21 +1,10 @@
 // ช่อง Username แบบเลือกรูปแบบรหัส + แสดงรหัสถัดไปเป็นตัวสีเทา (เว้นว่าง = ใช้รหัสนั้น)
-export default function UsernameCodeInput({ prefixes, selectedPrefix, onPrefixChange, value, onChange, suggestion, loading, error }) {
+export default function UsernameCodeInput({ picker, value, onChange, suggestion, loading, error }) {
   return (
     <div>
       <label className="block text-gray-700 text-xs font-bold uppercase mb-2">ชื่อผู้ใช้งาน (Username)</label>
 
-      <div className="flex bg-gray-100 p-1 rounded-lg mb-2 text-xs font-bold">
-        {prefixes.map(({ prefix, digits }) => (
-          <button
-            key={prefix}
-            type="button"
-            onClick={() => onPrefixChange(prefix)}
-            className={`flex-1 py-1.5 rounded-md transition ${selectedPrefix === prefix ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            {prefix}{'X'.repeat(digits)}
-          </button>
-        ))}
-      </div>
+      <div className="mb-2">{picker}</div>
 
       <input
         type="text"

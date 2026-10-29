@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { USERNAME_PREFIXES, useNextUsername } from '../../../lib/usernameCodes';
+import { useUsernamePrefixes, useNextUsername } from '../../../lib/usernameCodes';
+import UsernamePrefixPicker from '../../../components/UsernamePrefixPicker';
 import UsernameCodeInput from '../../../components/UsernameCodeInput';
 
 export default function AddStudentModal({ isOpen, onClose }) {
@@ -14,8 +15,9 @@ export default function AddStudentModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [usernamePrefix, setUsernamePrefix] = useState(USERNAME_PREFIXES.student[0].prefix);
-  const prefixConfig = USERNAME_PREFIXES.student.find(p => p.prefix === usernamePrefix);
+  const [usernamePrefix, setUsernamePrefix] = useState('');
+  const prefixSet = useUsernamePrefixes('student', isOpen);
+  const prefixConfig = prefixSet.prefixes.find(p => p.prefix === usernamePrefix) || prefixSet.prefixes[0];
   const nextCode = useNextUsername('student', prefixConfig, isOpen);
 
   if (!isOpen) return null;
@@ -114,9 +116,16 @@ export default function AddStudentModal({ isOpen, onClose }) {
           </div>
 
           <UsernameCodeInput
-            prefixes={USERNAME_PREFIXES.student}
-            selectedPrefix={usernamePrefix}
-            onPrefixChange={setUsernamePrefix}
+            picker={
+              <UsernamePrefixPicker
+                prefixes={prefixSet.prefixes}
+                selectedPrefix={prefixConfig.prefix}
+                onSelect={setUsernamePrefix}
+                tableReady={prefixSet.tableReady}
+                onAdd={prefixSet.add}
+                onRemove={prefixSet.remove}
+              />
+            }
             value={username}
             onChange={setUsername}
             suggestion={nextCode.suggestion}
