@@ -23,6 +23,7 @@ export default function MyStudents() {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState(null); // null = ยังไม่ได้ค้นหา
   const [addingId, setAddingId] = useState(null);
+  const [removingId, setRemovingId] = useState(null);
   const [message, setMessage] = useState('');
 
   const loadMyStudents = useCallback(async () => {
@@ -81,6 +82,21 @@ export default function MyStudents() {
       await loadMyStudents();
     }
     setAddingId(null);
+  };
+
+  const handleRemove = async (student) => {
+    if (!window.confirm(`นำ ${student.username} - ${student.name} ออกจากความดูแล?\n\n• จะเลือกนักเรียนคนนี้ในหน้าลงเวลาไม่ได้อีก\n• ประวัติการสอนเดิมยังอยู่ครบ\n• เพิ่มกลับได้ภายหลังด้วยชื่อ + ระดับชั้น`)) return;
+    setRemovingId(student.id);
+    setMessage('');
+    const { error } = await supabase.rpc('tutor_remove_student', { p_student_id: student.id });
+    if (error) {
+      setMessage(`❌ นำออกไม่สำเร็จ: ${error.message}`);
+    } else {
+      setMessage(`✅ นำ ${student.username} - ${student.name} ออกจากความดูแลแล้ว`);
+      setResults(null);
+      await loadMyStudents();
+    }
+    setRemovingId(null);
   };
 
   const renderResultRow = (s) => (
@@ -195,14 +211,24 @@ export default function MyStudents() {
         ) : (
           <div className="divide-y divide-gray-100">
             {myStudents.map(s => (
-              <div key={s.id} className="py-2.5 flex justify-between text-sm" translate="no">
-                <span className="font-semibold text-gray-800">{s.username} - {s.name}</span>
-                <span className="text-gray-500">{s.grade || '-'}</span>
+              <div key={s.id} className="py-2.5 flex items-center justify-between gap-3 text-sm" translate="no">
+                <span className="font-semibold text-gray-800 min-w-0 truncate">{s.username} - {s.name}</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-gray-500">{s.grade || '-'}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(s)}
+                    disabled={removingId !== null}
+                    className="px-2.5 py-1 text-xs font-bold text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition disabled:opacity-50"
+                  >
+                    {removingId === s.id ? 'กำลังนำออก...' : 'นำออก'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
-        <p className="text-[11px] text-gray-400 mt-3">* นักเรียนในกลุ่มเรียนจะไม่แสดงในรายการนี้ (แอดมินเป็นผู้จัดการกลุ่ม) · หากต้องการนำนักเรียนออก กรุณาติดต่อแอดมิน</p>
+        <p className="text-[11px] text-gray-400 mt-3">* นักเรียนในกลุ่มเรียนจะไม่แสดงในรายการนี้ (แอดมินเป็นผู้จัดการกลุ่ม) · การนำออกไม่ลบประวัติการสอนเดิม</p>
       </div>
     </div>
   );
